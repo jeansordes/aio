@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -29,8 +37,9 @@ jobs:
       - name: Validate tag matches package version
         shell: bash
         run: |
+          RELEASE_TAG="${{ inputs.tag || github.ref_name }}"
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${RELEASE_TAG#v}"
           if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)"
             exit 1
@@ -49,10 +58,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" \
+          RELEASE_TAG="${{ inputs.tag || github.ref_name }}"
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" \
               --generate-notes \
-              --title "$GITHUB_REF_NAME"
+              --title "$RELEASE_TAG"
 
       - name: Publish to npm
         run: npm publish --access public

@@ -61,6 +61,8 @@ Checks:
   changelog or release Actions.
 - Ensure the release workflow uses Node `22.14.0` or newer and npm `11.5.1` or
   newer so npm trusted publishing can use GitHub OIDC.
+- Use the workflow dispatch input only to publish an existing release tag after
+  npm trusted publishing or workflow infrastructure has been fixed.
 - Do not push automatically unless the operator explicitly asks.
 - If this workspace is missing `.git`, stop after reporting that release
   preparation must be run in a real git checkout.
