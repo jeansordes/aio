@@ -1,65 +1,62 @@
 # `@jeansordes/aio`
 
-Minimal placeholder package for:
+Jean Sordes's AI Orchestrator CLI.
+
+`aio` is currently under construction. The package is published so you can
+install and run the CLI entrypoint while the full orchestration experience is
+being built.
+
+## Run
 
 ```bash
 npx @jeansordes/aio
 ```
 
-and:
-
 ```bash
 bunx @jeansordes/aio
 ```
 
-Current output:
+## Install Globally
+
+With npm:
+
+```bash
+npm install -g @jeansordes/aio
+aio
+```
+
+With Bun:
+
+```bash
+bun add -g @jeansordes/aio
+aio
+```
+
+## Current Behavior
+
+For now, the command prints:
 
 ```text
 Hi! Welcome to Jean Sordes's AI Orchestrator, a tool for orchestrating AI agents in coding project. The project is currently under construction, stay tuned !
 ```
 
-## Roadmap Commits
+When installed globally, `aio` checks whether a newer version is available. If
+there is one, it asks before updating itself.
 
-Implementation work follows `specs/roadmap.csv`.
+Package-manager one-off runs such as `npx @jeansordes/aio` and
+`bunx @jeansordes/aio` do not self-update.
 
-Each concrete requirement row that becomes `done` gets exactly one conventional
-commit. Parent feature or domain rows can be updated in that same commit only if
-they naturally become `done` from the same work.
+## Requirements
 
-The repo-local skill for this flow lives at
-`.agents/skills/commit-conventional/SKILL.md`.
+Use a current Node.js runtime. The published package is tested with Node.js 22.
 
-## Changelog
+## Package
 
-`CHANGELOG.md` is generated from conventional commit history.
+The npm package is:
 
-On pushes to the default branch, `.github/workflows/changelog.yml` regenerates
-the file and commits it back only when the content changed. The workflow skips
-its own `chore(changelog): ...` commits to avoid an infinite loop.
-
-For a local refresh in a real git checkout:
-
-```bash
-npm install
-npm run changelog:write
+```text
+@jeansordes/aio
 ```
 
-## Releases
-
-Recommended flow:
-
-1. Use conventional commits for roadmap-scoped work.
-2. Run `npm run release:plan` to inspect commits since the latest tag.
-3. If the recommended bump is `patch`, `minor`, or `major`, update
-   `package.json` locally.
-4. Regenerate `CHANGELOG.md`.
-5. Commit with `chore(release): vX.Y.Z`.
-6. Create a matching tag such as `v0.0.1`.
-7. Push the release commit and tag.
-8. GitHub Actions uses npm Trusted Publishing via GitHub OIDC to publish to npm.
-9. The same workflow creates the matching GitHub Release.
-
-Repo-local release instructions live at
-`.agents/skills/release-semver/SKILL.md`.
-
-The publishing workflow lives in `.github/workflows/release.yml`.
+Project releases are listed in
+[CHANGELOG.md](https://github.com/jeansordes/aio/blob/main/CHANGELOG.md).
