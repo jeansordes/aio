@@ -1,8 +1,14 @@
+## 0.3.0 (2026-04-25)
+
+* feat(update): add explicit package update command ([d1264b1](https://github.com/jeansordes/aio/commit/d1264b1))
+* docs(specs): plan long-running workflow governance ([886933c](https://github.com/jeansordes/aio/commit/886933c))
+
 ## 0.2.0 (2026-04-25)
 
-* feat(orchestration): add project setup and workflow runner ([a307ef6](https://github.com/jeansordes/aio/commit/a307ef6))
 * chore: ignore macOS metadata files ([0a0559a](https://github.com/jeansordes/aio/commit/0a0559a))
 * chore(changelog): regenerate from conventional commits ([4b20741](https://github.com/jeansordes/aio/commit/4b20741))
+* chore(release): v0.2.0 ([11927c9](https://github.com/jeansordes/aio/commit/11927c9))
+* feat(orchestration): add project setup and workflow runner ([a307ef6](https://github.com/jeansordes/aio/commit/a307ef6))
 * ci: add provenance package metadata ([4146a47](https://github.com/jeansordes/aio/commit/4146a47))
 * ci: allow republishing existing release tags ([e2071af](https://github.com/jeansordes/aio/commit/e2071af))
 * ci: run actions only for releases ([dbae075](https://github.com/jeansordes/aio/commit/dbae075))
