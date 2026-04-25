@@ -1,3 +1,8 @@
+---
+name: commit-conventional
+description: Create a scoped conventional commit for a completed roadmap requirement row, after verifying the implementation, spec, and roadmap note align.
+---
+
 # Commit Conventional
 
 Use this skill when a concrete `specs/roadmap.csv` requirement row has just been

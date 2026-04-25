@@ -1,3 +1,8 @@
+---
+name: release-semver
+description: Prepare a semver release from conventional commits, including version, changelog, roadmap, release commit, and tag updates.
+---
+
 # Release Semver
 
 Use this skill when the repo is in a real git checkout and a release may need to
