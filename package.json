@@ -17,6 +17,7 @@
   },
   "files": [
     "bin",
+    "lib",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -30,5 +31,8 @@
   },
   "devDependencies": {
     "conventional-changelog": "6.0.0"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
   }
 }

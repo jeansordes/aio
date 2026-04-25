@@ -5,6 +5,9 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
+const { main, routeCommand } = require("../lib/cli");
+const { setupProject } = require("../lib/setup");
+const { runWorkflow } = require("../lib/workflow");
 
 test("shouldOfferUpdate only prompts for newer versions on global npm installs with a TTY", () => {
   assert.equal(
@@ -233,6 +236,235 @@ test("detectInstallContext fails closed when Bun global path detection is unavai
   );
 });
 
+test("main routes commands after update gating without prompting in non-TTY runs", async () => {
+  const sandbox = createSandbox();
+  let prompted = false;
+
+  const result = await main({
+    argv: ["init"],
+    projectRoot: sandbox,
+    latestVersion: "9.9.9",
+    installContext: "global-npm",
+    stdinIsTTY: false,
+    stdoutIsTTY: false,
+    promptForUpdate: async () => {
+      prompted = true;
+      return false;
+    },
+  });
+
+  assert.equal(prompted, false);
+  assert.equal(fs.existsSync(path.join(sandbox, ".aio", "config.yaml")), true);
+  assert.equal(result.scaffoldSpecs, false);
+});
+
+test("routeCommand keeps the no-command placeholder behavior", async () => {
+  const result = await routeCommand([], { latestVersion: false });
+  assert.match(result.message, /currently under construction/);
+});
+
+test("init creates the expected .aio structure without non-TTY specs scaffolding", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+
+  for (const entry of [
+    ".aio/config.yaml",
+    ".aio/providers/cursor.sh",
+    ".aio/providers/codex.sh",
+    ".aio/providers/claude.sh",
+    ".aio/providers/gemini.sh",
+    ".aio/providers/opencode.sh",
+    ".aio/providers/custom.sh",
+    ".aio/roles/analyse.yaml",
+    ".aio/roles/plan.yaml",
+    ".aio/roles/build.yaml",
+    ".aio/roles/review.yaml",
+    ".aio/roles/fix.yaml",
+    ".aio/roles/log.yaml",
+    ".aio/roles/commit.yaml",
+    ".aio/roles/publish.yaml",
+    ".aio/workflows/default.yaml",
+    ".aio/prompts",
+    ".aio/schemas",
+  ]) {
+    assert.equal(fs.existsSync(path.join(sandbox, entry)), true, `${entry} should exist`);
+  }
+
+  assert.equal(fs.existsSync(path.join(sandbox, "specs")), false);
+});
+
+test("setup is idempotent and does not overwrite changed files", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  const configPath = path.join(sandbox, ".aio", "config.yaml");
+  fs.writeFileSync(configPath, "version: custom\n");
+
+  const result = await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+
+  assert.equal(fs.readFileSync(configPath, "utf8"), "version: custom\n");
+  assert.equal(result.skipped.includes(configPath), true);
+});
+
+test("TTY-style setup can scaffold optional specs files", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, scaffoldSpecs: true });
+
+  for (const entry of [
+    "specs/roadmap.csv",
+    "specs/00-domains",
+    "specs/01-features",
+    "specs/02-requirements",
+  ]) {
+    assert.equal(fs.existsSync(path.join(sandbox, entry)), true, `${entry} should exist`);
+  }
+});
+
+test("aio run executes default.yaml with linear transitions and parsed JSON output", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok", role: request.role }));');
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: one
+states:
+  one:
+    role: analyse
+    next: two
+  two:
+    role: plan
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = runWorkflow({ projectRoot: sandbox });
+
+  assert.equal(result.finalState, "done");
+  assert.deepEqual(
+    result.outputs.map((output) => output.role),
+    ["analyse", "plan"],
+  );
+  assert.equal(result.previousOutputs.analyse.status, "ok");
+});
+
+test("generated default workflow is runnable with placeholder providers", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+
+  const result = runWorkflow({ projectRoot: sandbox });
+
+  assert.equal(result.finalState, "done");
+  assert.equal(result.previousOutputs.review.status, "not_configured");
+});
+
+test("aio run custom-name loads a named workflow", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok", workflow: request.workflow }));');
+  writeWorkflow(
+    sandbox,
+    "custom-name",
+    `name: custom-name
+initial: only
+states:
+  only:
+    role: analyse
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = runWorkflow({ projectRoot: sandbox, workflowName: "custom-name" });
+
+  assert.equal(result.workflow, "custom-name");
+  assert.equal(result.previousOutputs.analyse.workflow, "custom-name");
+});
+
+test("conditional transitions route by provider output and capture plain text stdout", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  writeProvider(
+    sandbox,
+    "custom",
+    `if (request.role === "review") {
+  process.stdout.write(JSON.stringify({ status: "approved" }));
+} else {
+  process.stdout.write("plain text");
+}`,
+  );
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: build
+states:
+  build:
+    role: build
+    next: review
+  review:
+    role: review
+    next:
+      - if: review.status == "approved"
+        then: commit
+      - then: fix
+  fix:
+    role: fix
+    next: done
+  commit:
+    role: commit
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = runWorkflow({ projectRoot: sandbox });
+
+  assert.equal(result.outputs[0].output.content, "plain text");
+  assert.deepEqual(
+    result.outputs.map((output) => output.role),
+    ["build", "review", "commit"],
+  );
+});
+
+test("conditional transitions can use git.has_changes in a temp git repo", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  fs.writeFileSync(path.join(sandbox, "changed.txt"), "changed\n");
+  require("node:child_process").execFileSync("git", ["init"], { cwd: sandbox, stdio: "ignore" });
+  writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok" }));');
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: inspect
+states:
+  inspect:
+    role: analyse
+    next:
+      - if: git.has_changes == true
+        then: log
+      - then: done
+  log:
+    role: log
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = runWorkflow({ projectRoot: sandbox });
+
+  assert.deepEqual(
+    result.outputs.map((output) => output.role),
+    ["analyse", "log"],
+  );
+});
+
 function createSandbox() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aio-test-"));
 }
@@ -245,4 +477,27 @@ function createPackage(...segments) {
     JSON.stringify({ name: "@jeansordes/aio", version: "0.0.1" }),
   );
   return packageRoot;
+}
+
+function writeProvider(projectRoot, provider, body) {
+  const providerPath = path.join(projectRoot, ".aio", "providers", `${provider}.sh`);
+  fs.writeFileSync(
+    providerPath,
+    `#!/usr/bin/env sh
+node -e '
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const request = JSON.parse(input);
+  ${body}
+});
+'
+`,
+    { mode: 0o755 },
+  );
+}
+
+function writeWorkflow(projectRoot, name, content) {
+  fs.writeFileSync(path.join(projectRoot, ".aio", "workflows", `${name}.yaml`), content);
 }
