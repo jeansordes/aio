@@ -1,5 +1,10 @@
+## <small>0.3.1 (2026-04-25)</small>
+
+* fix(cli): man-style help; unify aio, help, -h, and --help ([b219758](https://github.com/jeansordes/aio/commit/b219758))
+
 ## 0.3.0 (2026-04-25)
 
+* chore(release): v0.3.0 ([4528fde](https://github.com/jeansordes/aio/commit/4528fde))
 * feat(update): add explicit package update command ([d1264b1](https://github.com/jeansordes/aio/commit/d1264b1))
 * docs(specs): plan long-running workflow governance ([886933c](https://github.com/jeansordes/aio/commit/886933c))
 
