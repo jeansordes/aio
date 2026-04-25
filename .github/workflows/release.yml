@@ -36,13 +36,14 @@ jobs:
       - name: Pack npm tarball
         run: npm pack
 
-      - name: Publish to npm
-        run: npm publish --access public
-
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --title "$GITHUB_REF_NAME"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --generate-notes \
+              --title "$GITHUB_REF_NAME"
+
+      - name: Publish to npm
+        run: npm publish --access public

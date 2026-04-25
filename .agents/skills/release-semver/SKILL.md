@@ -52,6 +52,8 @@ Checks:
 - Ensure the created tag format stays `vX.Y.Z`.
 - Ensure `specs/roadmap.csv` does not leave rows as `unreleased` when they are
   included in the release.
+- Keep release automation tag-driven; normal branch commits should not run
+  changelog or release Actions.
 - Do not push automatically unless the operator explicitly asks.
 - If this workspace is missing `.git`, stop after reporting that release
   preparation must be run in a real git checkout.
