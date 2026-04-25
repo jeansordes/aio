@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
+const { isUpdateCheckDisabled, shouldShowPassiveUpdateNotice } = require("../lib/update");
 const { main, routeCommand, updatePackage } = require("../lib/cli");
 const { configTemplate, detectTrackingCandidate, providerTemplate, setupProject } = require("../lib/setup");
 const { runWorkflow } = require("../lib/workflow");
@@ -27,6 +28,18 @@ test("shouldOfferUpdate only prompts for newer versions on global Bun installs w
     shouldOfferUpdate("0.0.2", {
       currentVersion: "0.0.1",
       installContext: "global-bun",
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+    }),
+    true,
+  );
+});
+
+test("shouldOfferUpdate only prompts for newer versions on global pnpm installs with a TTY", () => {
+  assert.equal(
+    shouldOfferUpdate("0.0.2", {
+      currentVersion: "0.0.1",
+      installContext: "global-pnpm",
       stdinIsTTY: true,
       stdoutIsTTY: true,
     }),
@@ -83,6 +96,13 @@ test("getUpdateCommand maps global npm and Bun installs to the correct installer
     args: ["add", "-g", "@jeansordes/aio@latest"],
     display: "bun add -g @jeansordes/aio@latest",
     relaunch: "bunx @jeansordes/aio",
+  });
+
+  assert.deepEqual(getUpdateCommand("global-pnpm"), {
+    bin: "pnpm",
+    args: ["add", "-g", "@jeansordes/aio@latest"],
+    display: "pnpm add -g @jeansordes/aio@latest",
+    relaunch: "aio",
   });
 });
 
@@ -147,6 +167,76 @@ test("detectInstallContext recognises global npm installs from npm root -g", () 
       argv0: "aio",
       env: {},
       npmGlobalRoot: globalRoot,
+      bunGlobalBin: path.join(sandbox, "bun-bin"),
+    }),
+    "global-npm",
+  );
+});
+
+test("detectInstallContext recognises global pnpm installs from pnpm root -g", () => {
+  const sandbox = createSandbox();
+  const pnpmGlobal = path.join(sandbox, "pnpm-root-g");
+  const packageRoot = createPackage(pnpmGlobal, "@jeansordes", "aio");
+  const scriptPath = path.join(packageRoot, "bin", "aio.js");
+
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.writeFileSync(scriptPath, "#!/usr/bin/env node\n");
+
+  assert.equal(
+    detectInstallContext({
+      cwd: path.join(sandbox, "workspace"),
+      scriptPath,
+      argv0: "aio",
+      env: {},
+      pnpmGlobalModulePath: pnpmGlobal,
+      npmModulePaths: [path.join(sandbox, "separate-npm")],
+      bunGlobalBin: path.join(sandbox, "bun-bin"),
+    }),
+    "global-pnpm",
+  );
+});
+
+test("detectInstallContext recognises global npm from NPM_CONFIG_PREFIX when linked to that tree", () => {
+  const sandbox = createSandbox();
+  const prefix = path.join(sandbox, "npm-prefix");
+  const modulesRoot = path.join(prefix, "lib", "node_modules");
+  const packageRoot = createPackage(modulesRoot, "@jeansordes", "aio");
+  const scriptPath = path.join(packageRoot, "bin", "aio.js");
+
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.writeFileSync(scriptPath, "#!/usr/bin/env node\n");
+
+  assert.equal(
+    detectInstallContext({
+      cwd: path.join(sandbox, "work"),
+      scriptPath,
+      argv0: "aio",
+      env: { NPM_CONFIG_PREFIX: prefix },
+      pnpmGlobalModulePath: null,
+      npmModulePaths: [modulesRoot],
+      bunGlobalBin: path.join(sandbox, "bun-bin"),
+    }),
+    "global-npm",
+  );
+});
+
+test("detectInstallContext is global-npm, not npx, when only npm user agent is set", () => {
+  const sandbox = createSandbox();
+  const globalRoot = path.join(sandbox, "global-npm");
+  const packageRoot = createPackage(globalRoot, "@jeansordes", "aio");
+  const scriptPath = path.join(packageRoot, "bin", "aio.js");
+
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.writeFileSync(scriptPath, "#!/usr/bin/env node\n");
+
+  assert.equal(
+    detectInstallContext({
+      cwd: path.join(sandbox, "workspace"),
+      scriptPath,
+      argv0: path.join(sandbox, "opt", "bin", "aio"),
+      env: { npm_config_user_agent: "npm/10.0.0 node/v22" },
+      pnpmGlobalModulePath: null,
+      npmModulePaths: [globalRoot],
       bunGlobalBin: path.join(sandbox, "bun-bin"),
     }),
     "global-npm",
@@ -334,6 +424,107 @@ test("aio update does not mutate unsupported install contexts", () => {
 
   assert.equal(result.status, "unsupported_install_context");
   assert.equal(installed, false);
+});
+
+test("aio update installs immediately for newer global pnpm installs", async () => {
+  let command = null;
+
+  const result = await main({
+    argv: ["update"],
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    installContext: "global-pnpm",
+    stdinIsTTY: true,
+    stdoutIsTTY: true,
+    promptForUpdate: async () => {
+      throw new Error("explicit update should not use the startup prompt");
+    },
+    installUpdate: (updateCommand) => {
+      command = updateCommand;
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(result.status, "updated");
+  assert.equal(command.display, "pnpm add -g @jeansordes/aio@latest");
+});
+
+test("main emits passive update notice for unknown with newer version when stderr is a TTY", async () => {
+  const noted = [];
+  await main({
+    argv: ["help"],
+    installContext: "unknown",
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    stderrIsTTY: true,
+    onPassiveUpdateNotice: (message) => {
+      noted.push(message);
+    },
+  });
+  assert.equal(noted.length, 1);
+  assert.match(noted[0], /9\.9\.9/);
+  assert.match(noted[0], /0\.0\.1/);
+  assert.match(noted[0], /npm install -g/);
+});
+
+test("main does not emit passive update when AIO_NO_UPDATE_CHECK is set", async () => {
+  const noted = [];
+  await main({
+    argv: ["help"],
+    installContext: "unknown",
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    stderrIsTTY: true,
+    env: { AIO_NO_UPDATE_CHECK: "1" },
+    onPassiveUpdateNotice: (message) => {
+      noted.push(message);
+    },
+  });
+  assert.equal(noted.length, 0);
+});
+
+test("main skips startup update checks when AIO_NO_UPDATE_CHECK is set", async () => {
+  let prompted = false;
+  const sandbox = createSandbox();
+  await main({
+    argv: ["init"],
+    projectRoot: sandbox,
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    installContext: "global-npm",
+    stdinIsTTY: false,
+    stdoutIsTTY: false,
+    env: { AIO_NO_UPDATE_CHECK: "1" },
+    promptForUpdate: async () => {
+      prompted = true;
+      return true;
+    },
+  });
+  assert.equal(prompted, false);
+  assert.equal(fs.existsSync(path.join(sandbox, ".aio", "config.yaml")), true);
+});
+
+test("shouldShowPassiveUpdateNotice and isUpdateCheckDisabled", () => {
+  assert.equal(
+    shouldShowPassiveUpdateNotice("9.0.0", {
+      currentVersion: "0.0.1",
+      installContext: "unknown",
+      stderrIsTTY: true,
+      env: {},
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowPassiveUpdateNotice("9.0.0", {
+      currentVersion: "0.0.1",
+      installContext: "unknown",
+      stderrIsTTY: true,
+      env: { AIO_NO_UPDATE_CHECK: "1" },
+    }),
+    false,
+  );
+  assert.equal(isUpdateCheckDisabled({ AIO_NO_UPDATE_CHECK: "true" }), true);
+  assert.equal(isUpdateCheckDisabled({}), false);
 });
 
 test("init creates the expected .aio structure without non-TTY specs scaffolding", async () => {

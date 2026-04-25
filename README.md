@@ -126,16 +126,22 @@ workflow for `aio run <workflow>`. It starts at `initial`, executes each state's
 role through the configured provider wrapper, follows direct or simple
 conditional transitions, and stops at `type: final`.
 
-When installed globally, `aio` checks whether a newer version is available. If
-there is one, it asks before updating itself.
+For installs aio recognizes as a **global npm, pnpm, or Bun** copy (it walks
+the running script and global paths), a normal `aio` command may compare your
+version to the registry, prompt on a TTY, and then run the matching installer
+if you accept.
 
-Package-manager one-off runs such as `npx @jeansordes/aio` and
-`bunx @jeansordes/aio` do not self-update.
+`npx @jeansordes/aio` and `bunx @jeansordes/aio` do not self-update. If a newer
+version is published and aio cannot run an installer (for example, npx, bunx, an
+unrecognized path, or `unknown`), a short notice may be printed to stderr with
+`npm` / `pnpm` / `bun` one-liners. Set `AIO_NO_UPDATE_CHECK=1` to skip these
+registry checks and notices on normal commands (for example in CI). The
+`aio update` subcommand still checks the registry when you run it explicitly.
 
-`aio update` is the explicit update command. It checks the latest published
-package version and immediately updates global npm or Bun installs. For npx,
-bunx, local, or unknown invocations, it prints manual install guidance instead
-of mutating an unrelated environment.
+`aio update` is the explicit update command. It fetches the latest version and,
+when possible, immediately updates a detected global npm, pnpm, or Bun
+install. For npx, bunx, local, or other unsupported contexts, it prints manual
+install commands instead of changing an unrelated environment.
 
 ## Requirements
 
