@@ -1,0 +1,28 @@
+{
+  "name": "@jeansordes/aio",
+  "version": "0.0.1",
+  "description": "Jean Sordes's AI Orchestrator CLI.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test",
+    "changelog:write": "node ./scripts/write-changelog.js",
+    "release:plan": "node ./scripts/release-plan.js"
+  },
+  "bin": "./bin/aio.js",
+  "files": [
+    "bin",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "cli",
+    "ai",
+    "orchestrator"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "conventional-changelog": "6.0.0"
+  }
+}
