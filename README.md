@@ -2,8 +2,7 @@
 
 Jean Sordes's AI Orchestrator CLI.
 
-`aio` is currently under construction. The package now includes the first
-runnable orchestration slice: project setup plus YAML-driven workflow execution
+`aio` scaffolds a project-local `.aio/` tree and runs YAML-defined workflows
 through replaceable provider wrapper scripts.
 
 ## Run
@@ -64,11 +63,10 @@ aio
 
 ## Current Behavior
 
-With no command, the CLI still prints:
-
-```text
-Hi! Welcome to Jean Sordes's AI Orchestrator, a tool for orchestrating AI agents in coding project. The project is currently under construction, stay tuned !
-```
+With no subcommand, or with `help`, `-h`, or `--help` as the first argument, the
+CLI prints the same man-style help (sectioned `NAME`, `SYNOPSIS`, `DESCRIPTION`,
+`COMMANDS`, `EXAMPLES`, `VERSION`). So `aio`, `aio help`, `aio -h`, and `aio
+--help` are equivalent.
 
 `aio init` and `aio setup` create project-local orchestration files:
 

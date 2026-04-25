@@ -258,9 +258,24 @@ test("main routes commands after update gating without prompting in non-TTY runs
   assert.equal(result.scaffoldSpecs, false);
 });
 
-test("routeCommand keeps the no-command placeholder behavior", async () => {
-  const result = await routeCommand([], { latestVersion: false });
-  assert.match(result.message, /currently under construction/);
+test("routeCommand prints man-style help for bare aio, help, -h, and --help", async () => {
+  const opts = { latestVersion: false };
+  const noArgs = (await routeCommand([], opts)).message;
+  const help = (await routeCommand(["help"], opts)).message;
+  const h = (await routeCommand(["-h"], opts)).message;
+  const longHelp = (await routeCommand(["--help"], opts)).message;
+  assert.equal(noArgs, help);
+  assert.equal(noArgs, h);
+  assert.equal(noArgs, longHelp);
+  assert.match(noArgs, /NAME/);
+  assert.match(noArgs, /SYNOPSIS/);
+  assert.match(noArgs, /DESCRIPTION/);
+  assert.match(noArgs, /COMMANDS/);
+  assert.match(noArgs, /EXAMPLES/);
+  assert.match(noArgs, /VERSION/);
+  assert.match(noArgs, /aio init/);
+  assert.match(noArgs, /aio run/);
+  assert.match(noArgs, /aio update/);
 });
 
 test("aio update installs immediately for newer global npm installs", async () => {
