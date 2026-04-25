@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
-const { main, routeCommand } = require("../lib/cli");
+const { main, routeCommand, updatePackage } = require("../lib/cli");
 const { setupProject } = require("../lib/setup");
 const { runWorkflow } = require("../lib/workflow");
 
@@ -261,6 +261,63 @@ test("main routes commands after update gating without prompting in non-TTY runs
 test("routeCommand keeps the no-command placeholder behavior", async () => {
   const result = await routeCommand([], { latestVersion: false });
   assert.match(result.message, /currently under construction/);
+});
+
+test("aio update installs immediately for newer global npm installs", async () => {
+  let command = null;
+
+  const result = await main({
+    argv: ["update"],
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    installContext: "global-npm",
+    stdinIsTTY: true,
+    stdoutIsTTY: true,
+    promptForUpdate: async () => {
+      throw new Error("explicit update should not use the startup prompt");
+    },
+    installUpdate: (updateCommand) => {
+      command = updateCommand;
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(result.status, "updated");
+  assert.equal(command.display, "npm install -g @jeansordes/aio@latest");
+});
+
+test("aio update reports up-to-date installs without running an installer", () => {
+  let installed = false;
+
+  const result = updatePackage({
+    latestVersion: "0.2.0",
+    currentVersion: "0.2.0",
+    installContext: "global-npm",
+    installUpdate: () => {
+      installed = true;
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(result.status, "up_to_date");
+  assert.equal(installed, false);
+});
+
+test("aio update does not mutate unsupported install contexts", () => {
+  let installed = false;
+
+  const result = updatePackage({
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    installContext: "npx",
+    installUpdate: () => {
+      installed = true;
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(result.status, "unsupported_install_context");
+  assert.equal(installed, false);
 });
 
 test("init creates the expected .aio structure without non-TTY specs scaffolding", async () => {

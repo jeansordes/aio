@@ -40,6 +40,12 @@ Run a named workflow from `.aio/workflows/<name>.yaml`:
 npx @jeansordes/aio run release
 ```
 
+Check for a newer package version and update a supported global install:
+
+```bash
+aio update
+```
+
 ## Install Globally
 
 With npm:
@@ -110,6 +116,11 @@ there is one, it asks before updating itself.
 
 Package-manager one-off runs such as `npx @jeansordes/aio` and
 `bunx @jeansordes/aio` do not self-update.
+
+`aio update` is the explicit update command. It checks the latest published
+package version and immediately updates global npm or Bun installs. For npx,
+bunx, local, or unknown invocations, it prints manual install guidance instead
+of mutating an unrelated environment.
 
 ## Requirements
 
