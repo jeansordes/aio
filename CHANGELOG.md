@@ -1,3 +1,14 @@
+## 0.2.0 (2026-04-25)
+
+* feat(orchestration): add project setup and workflow runner ([a307ef6](https://github.com/jeansordes/aio/commit/a307ef6))
+* chore: ignore macOS metadata files ([0a0559a](https://github.com/jeansordes/aio/commit/0a0559a))
+* chore(changelog): regenerate from conventional commits ([4b20741](https://github.com/jeansordes/aio/commit/4b20741))
+* ci: add provenance package metadata ([4146a47](https://github.com/jeansordes/aio/commit/4146a47))
+* ci: allow republishing existing release tags ([e2071af](https://github.com/jeansordes/aio/commit/e2071af))
+* ci: run actions only for releases ([dbae075](https://github.com/jeansordes/aio/commit/dbae075))
+* ci: use npm trusted publishing toolchain ([c20cb5a](https://github.com/jeansordes/aio/commit/c20cb5a))
+* docs: add skill metadata ([4cd11f1](https://github.com/jeansordes/aio/commit/4cd11f1))
+* docs: make README user-facing ([8f9382c](https://github.com/jeansordes/aio/commit/8f9382c))
 
 ## 0.1.0 (2026-04-25)
 
