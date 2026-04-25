@@ -8,7 +8,9 @@
     "changelog:write": "node ./scripts/write-changelog.js",
     "release:plan": "node ./scripts/release-plan.js"
   },
-  "bin": "./bin/aio.js",
+  "bin": {
+    "aio": "bin/aio.js"
+  },
   "files": [
     "bin",
     "README.md",

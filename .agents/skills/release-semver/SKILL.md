@@ -54,6 +54,8 @@ Checks:
   included in the release.
 - Keep release automation tag-driven; normal branch commits should not run
   changelog or release Actions.
+- Ensure the release workflow uses Node `22.14.0` or newer and npm `11.5.1` or
+  newer so npm trusted publishing can use GitHub OIDC.
 - Do not push automatically unless the operator explicitly asks.
 - If this workspace is missing `.git`, stop after reporting that release
   preparation must be run in a real git checkout.
