@@ -1,5 +1,10 @@
+## 0.4.0 (2026-04-25)
+
+* feat(setup): tracking file, cursor-agent provider, projectKnowledge ([ad6558e](https://github.com/jeansordes/aio/commit/ad6558e))
+
 ## <small>0.3.1 (2026-04-25)</small>
 
+* chore(release): v0.3.1 ([37dc019](https://github.com/jeansordes/aio/commit/37dc019))
 * fix(cli): man-style help; unify aio, help, -h, and --help ([b219758](https://github.com/jeansordes/aio/commit/b219758))
 
 ## 0.3.0 (2026-04-25)
