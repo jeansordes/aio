@@ -1,0 +1,4 @@
+provider: custom
+model: default
+instructions: "Record a concise summary of the current workflow result."
+contextFiles: []

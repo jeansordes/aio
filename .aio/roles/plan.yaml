@@ -1,0 +1,4 @@
+provider: custom
+model: default
+instructions: "Create a concise implementation plan from the analysis."
+contextFiles: []

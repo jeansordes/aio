@@ -1,0 +1,7 @@
+version: 1
+defaultWorkflow: default
+providersDirectory: providers
+rolesDirectory: roles
+workflowsDirectory: workflows
+tracking:
+  file: specs/roadmap.csv

@@ -1,0 +1,4 @@
+provider: custom
+model: default
+instructions: "Review the implementation and return status approved when it is ready."
+contextFiles: []

@@ -1,0 +1,4 @@
+provider: custom
+model: default
+instructions: "Publish or hand off the completed change as configured by the project."
+contextFiles: []

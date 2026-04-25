@@ -1,0 +1,23 @@
+name: roadmap-step
+initial: pickRow
+states:
+  pickRow:
+    role: pick-row
+    next: implement
+  implement:
+    role: implement
+    next: test
+  test:
+    role: test
+    next:
+      - if: test.status == "ok"
+        then: commit
+      - then: fix
+  fix:
+    role: fix
+    next: test
+  commit:
+    role: commit
+    next: done
+  done:
+    type: final

@@ -1,0 +1,11 @@
+provider: cursor
+model: default
+instructions: |
+  In the project root, run: node --test
+  If all tests pass, reply with only this JSON (no other text after it on stdout is required from you;
+  the agent should ensure the last line of meaningful output is valid JSON):
+  {"status":"ok","content":"tests passed"}
+  If tests fail, use:
+  {"status":"failed","content":"<failing test summary>"}
+  The workflow will route on test.status; use exactly those status strings.
+contextFiles: []

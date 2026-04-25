@@ -1,0 +1,36 @@
+name: default
+initial: analyse
+states:
+  analyse:
+    role: analyse
+    next: plan
+  plan:
+    role: plan
+    next: build
+  build:
+    role: build
+    next: review
+  review:
+    role: review
+    next:
+      - if: review.status == "approved"
+        then: commit
+      - if: review.status == "not_configured"
+        then: log
+      - if: git.has_changes == true
+        then: fix
+      - then: log
+  fix:
+    role: fix
+    next: review
+  log:
+    role: log
+    next: done
+  commit:
+    role: commit
+    next: publish
+  publish:
+    role: publish
+    next: done
+  done:
+    type: final

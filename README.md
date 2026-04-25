@@ -39,6 +39,10 @@ Run a named workflow from `.aio/workflows/<name>.yaml`:
 npx @jeansordes/aio run release
 ```
 
+This repository also ships a custom `roadmap-step` workflow (see
+`.aio/workflows/roadmap-step.yaml`) for executing one tracked roadmap item at a
+time with `aio run roadmap-step` once `cursor-agent` is available.
+
 Check for a newer package version and update a supported global install:
 
 ```bash
@@ -68,7 +72,21 @@ CLI prints the same man-style help (sectioned `NAME`, `SYNOPSIS`, `DESCRIPTION`,
 `COMMANDS`, `EXAMPLES`, `VERSION`). So `aio`, `aio help`, `aio -h`, and `aio
 --help` are equivalent.
 
-`aio init` and `aio setup` create project-local orchestration files:
+`aio init` and `aio setup` create project-local orchestration files.
+
+During init, `config.yaml` records a `tracking.file` for your task or roadmap
+tracker. In interactive shells you are prompted: accept a detected default
+(`specs/roadmap.csv`, `TASKS.md`, or `ROADMAP.md` in that order), type another
+path, use `s` to scaffold the optional `specs/` layout (including
+`specs/roadmap.csv`), or `n` for no file. In non-interactive runs (for example
+CI) init auto-detects those same paths; it does not create `specs/`.
+
+The generated `providers/cursor.sh` uses the
+[Cursor Agent CLI](https://cursor.com/docs/cli) (`cursor-agent` on your
+`PATH`, non-interactive `print` mode) so workflows can run without editing that
+file first. Set `CURSOR_API_KEY` in the environment (see Cursor docs) so the
+CLI can authenticate. Other provider wrappers are still placeholders until you
+replace them.
 
 ```text
 .aio/
@@ -95,14 +113,13 @@ CLI prints the same man-style help (sectioned `NAME`, `SYNOPSIS`, `DESCRIPTION`,
   schemas/
 ```
 
-Setup never overwrites existing files. In interactive terminals it also asks
-whether to scaffold this repository's optional `specs/` roadmap structure. In
-non-interactive runs it does not create `specs/`.
+Setup never overwrites existing files.
 
 Provider wrappers read a standard JSON request on stdin and write normalized
-JSON on stdout. The generated wrappers are placeholders that return a clear
-`not_configured` result until you edit them to call Cursor, Codex, Claude,
-Gemini, OpenCode, or a custom tool.
+JSON on stdout. The generated `cursor` wrapper calls `cursor-agent` as
+described above. The other provider scripts are placeholders that return a
+clear `not_configured` result until you edit them to call Codex, Claude, Gemini,
+OpenCode, or a custom tool.
 
 Workflow execution loads `.aio/workflows/default.yaml` for `aio run` or a named
 workflow for `aio run <workflow>`. It starts at `initial`, executes each state's

@@ -1,0 +1,4 @@
+provider: custom
+model: default
+instructions: "Implement the planned change in the working tree."
+contextFiles: []

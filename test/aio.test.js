@@ -6,8 +6,9 @@ const path = require("node:path");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
 const { main, routeCommand, updatePackage } = require("../lib/cli");
-const { setupProject } = require("../lib/setup");
+const { configTemplate, detectTrackingCandidate, providerTemplate, setupProject } = require("../lib/setup");
 const { runWorkflow } = require("../lib/workflow");
+const YAML = require("yaml");
 
 test("shouldOfferUpdate only prompts for newer versions on global npm installs with a TTY", () => {
   assert.equal(
@@ -363,6 +364,89 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
   }
 
   assert.equal(fs.existsSync(path.join(sandbox, "specs")), false);
+  const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
+  assert.equal(config.tracking.file, null);
+});
+
+test("non-interactive init writes detected tracking file from specs/roadmap.csv", async () => {
+  const sandbox = createSandbox();
+  fs.mkdirSync(path.join(sandbox, "specs"), { recursive: true });
+  fs.writeFileSync(path.join(sandbox, "specs", "roadmap.csv"), "id,title\n");
+
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+
+  const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
+  assert.equal(config.tracking.file, "specs/roadmap.csv");
+});
+
+test("non-interactive init prefers first tracking candidate: TASKS.md over ROADMAP.md", async () => {
+  const sandbox = createSandbox();
+  fs.writeFileSync(path.join(sandbox, "TASKS.md"), "#\n");
+  fs.writeFileSync(path.join(sandbox, "ROADMAP.md"), "#\n");
+
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+
+  const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
+  assert.equal(config.tracking.file, "TASKS.md");
+});
+
+test("configTemplate encodes tracking file or null", () => {
+  assert.match(configTemplate("specs/roadmap.csv"), /tracking:\n  file: specs\/roadmap\.csv/);
+  assert.match(configTemplate(null), /tracking:\n  file: null/);
+});
+
+test("providerTemplate for cursor uses cursor-agent headless flags", () => {
+  const body = providerTemplate("cursor");
+  assert.match(body, /cursor-agent/);
+  assert.match(body, /-p.*--force.*--trust/s);
+  assert.match(body, /--output-format.*json/);
+});
+
+test("detectTrackingCandidate returns first existing candidate in order", () => {
+  const sandbox = createSandbox();
+  assert.equal(detectTrackingCandidate(sandbox), null);
+  fs.writeFileSync(path.join(sandbox, "ROADMAP.md"), "x");
+  assert.equal(detectTrackingCandidate(sandbox), "ROADMAP.md");
+  fs.mkdirSync(path.join(sandbox, "specs"), { recursive: true });
+  fs.writeFileSync(path.join(sandbox, "specs", "roadmap.csv"), "h");
+  assert.equal(detectTrackingCandidate(sandbox), "specs/roadmap.csv");
+});
+
+test("aio run passes projectKnowledge.trackingFile from config to the provider", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  fs.writeFileSync(
+    path.join(sandbox, ".aio", "config.yaml"),
+    `version: 1
+defaultWorkflow: default
+providersDirectory: providers
+rolesDirectory: roles
+workflowsDirectory: workflows
+tracking:
+  file: my-tracker.csv
+`,
+  );
+  writeProvider(
+    sandbox,
+    "custom",
+    'process.stdout.write(JSON.stringify({ status: "ok", tracking: request.projectKnowledge && request.projectKnowledge.trackingFile }));',
+  );
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: only
+states:
+  only:
+    role: analyse
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = runWorkflow({ projectRoot: sandbox });
+  assert.equal(result.previousOutputs.analyse.tracking, "my-tracker.csv");
 });
 
 test("setup is idempotent and does not overwrite changed files", async () => {

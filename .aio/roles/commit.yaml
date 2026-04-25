@@ -1,0 +1,11 @@
+provider: cursor
+model: default
+instructions: |
+  Apply .agents/skills/commit-conventional/SKILL.md. Create one conventional commit for the
+  completed requirement only. If nothing should be committed, reply with
+  {"status":"skipped","content":"no commit"}. If you committed, reply with
+  {"status":"ok","content":"commit created"}.
+contextFiles:
+  - AGENT.md
+  - specs/roadmap.csv
+  - .agents/skills/commit-conventional/SKILL.md
