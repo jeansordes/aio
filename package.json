@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Jean Sordes's AI Orchestrator CLI.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeansordes/aio.git"
+  },
   "scripts": {
     "test": "node --test",
     "changelog:write": "node ./scripts/write-changelog.js",

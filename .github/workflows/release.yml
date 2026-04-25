@@ -34,6 +34,10 @@ jobs:
       - name: Setup npm
         run: npm install -g npm@11
 
+      - name: Normalize package metadata
+        run: |
+          node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.repository = { type: 'git', url: 'https://github.com/jeansordes/aio.git' }; pkg.bin = { aio: 'bin/aio.js' }; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
       - name: Validate tag matches package version
         shell: bash
         run: |
