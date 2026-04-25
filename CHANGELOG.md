@@ -1,7 +1,4 @@
-# Changelog
+## <small>0.0.1 (2026-04-25)</small>
 
-All notable changes to this project will be documented in this file.
-
-This file is regenerated from conventional commit history by
-`.github/workflows/changelog.yml` and can be refreshed locally with
-`npm run changelog:write` in a real git checkout.
+* feat: scaffold aio cli and release workflow ([189de22](https://github.com/jeansordes/aio/commit/189de22))
+* Initial commit ([d28b07a](https://github.com/jeansordes/aio/commit/d28b07a))
