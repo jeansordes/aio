@@ -60,3 +60,25 @@ Examples:
 
 - **Single completed requirement:** follow **`.agents/skills/commit-conventional/SKILL.md`** (one conventional commit per requirement unit; read this file and the touched spec rows first).
 - **Ship a version:** follow **`.agents/skills/release-semver/SKILL.md`** after the relevant `feat` / `fix` commits are on the branch you intend to release.
+
+## Push to GitHub
+
+When work should be on the remote (normal feature work, docs, or after cutting a release), **push the branch and any new version tags**. Releases are **tag-driven**: the workflow in `.github/workflows/release.yml` publishes to npm from pushed `vX.Y.Z` tags.
+
+```bash
+git push origin main
+```
+
+After creating a release tag locally:
+
+```bash
+git push origin vX.Y.Z
+```
+
+To push all local tags:
+
+```bash
+git push origin --tags
+```
+
+If the operator asked to publish or “push everything,” run the branch push and the tag push (or `--tags` when several tags are new).

@@ -34,8 +34,9 @@ Workflow:
 6. Regenerate `CHANGELOG.md`.
 7. Create release commit `chore(release): vX.Y.Z`.
 8. Create matching `vX.Y.Z` tag.
-9. Tell the operator to push the release commit and tag so
-   `.github/workflows/release.yml` publishes.
+9. **Push** so `.github/workflows/release.yml` can publish: `git push origin main` (or
+   the release branch) **and** `git push origin vX.Y.Z`. If the operator asked to
+   push everything, run these; otherwise confirm before pushing.
 
 Suggested commands:
 
@@ -47,6 +48,8 @@ npm run changelog:write
 git add package.json package-lock.json CHANGELOG.md specs/roadmap.csv
 git commit -m "chore(release): vX.Y.Z"
 git tag vX.Y.Z
+git push origin main
+git push origin vX.Y.Z
 ```
 
 Checks:
@@ -63,6 +66,8 @@ Checks:
   newer so npm trusted publishing can use GitHub OIDC.
 - Use the workflow dispatch input only to publish an existing release tag after
   npm trusted publishing or workflow infrastructure has been fixed.
-- Do not push automatically unless the operator explicitly asks.
+- Push after a release when the operator asked to ship or to “push everything,”
+  or when finishing the release is explicitly in scope. Otherwise confirm before
+  pushing to `origin`.
 - If this workspace is missing `.git`, stop after reporting that release
   preparation must be run in a real git checkout.
