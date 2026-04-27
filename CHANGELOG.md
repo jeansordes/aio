@@ -1,5 +1,11 @@
+## 0.7.0 (2026-04-27)
+
+* fix(detect): treat symlinked aio in Bun global bin as global-bun ([e9e2473](https://github.com/jeansordes/aio/commit/e9e2473))
+* feat(setup): add guided init UI and default spec roadmap when untracked ([db6002d](https://github.com/jeansordes/aio/commit/db6002d))
+
 ## 0.6.0 (2026-04-27)
 
+* chore(release): v0.6.0 ([0c53fac](https://github.com/jeansordes/aio/commit/0c53fac))
 * feat(workflow): validate config and improve runtime diagnostics ([5973b0a](https://github.com/jeansordes/aio/commit/5973b0a))
 * docs: adopt AGENTS.md and point roles at it ([b4b0086](https://github.com/jeansordes/aio/commit/b4b0086))
 * docs: document git push after releases and for shipping ([b764274](https://github.com/jeansordes/aio/commit/b764274))
