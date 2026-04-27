@@ -2,4 +2,5 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export AIO_NO_UPDATE_CHECK=1
+export AIO_DEV=1
 exec node "$ROOT/bin/aio.js" "$@"
