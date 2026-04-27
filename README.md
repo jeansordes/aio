@@ -75,11 +75,12 @@ CLI prints the same man-style help (sectioned `NAME`, `SYNOPSIS`, `DESCRIPTION`,
 `aio init` and `aio setup` create project-local orchestration files.
 
 During init, `config.yaml` records a `tracking.file` for your task or roadmap
-tracker. In interactive shells you are prompted: accept a detected default
-(`specs/roadmap.csv`, `TASKS.md`, or `ROADMAP.md` in that order), type another
-path, use `s` to scaffold the optional `specs/` layout (including
-`specs/roadmap.csv`), or `n` for no file. In non-interactive runs (for example
-CI) init auto-detects those same paths; it does not create `specs/`.
+tracker. In interactive shells you get a short guided prompt: **Enter** keeps
+the first detected file among `specs/roadmap.csv`, `TASKS.md`, and `ROADMAP.md`,
+or—if none exist—scaffolds the optional `specs/` layout (including
+`specs/roadmap.csv`) as the default. You can still type another path, **`s`** to
+scaffold `specs/` explicitly, or **`n`** for no file. In non-interactive runs
+(for example CI) init auto-detects those same paths; it does not create `specs/`.
 
 The generated `providers/cursor.sh` uses the
 [Cursor Agent CLI](https://cursor.com/docs/cli) (`cursor-agent` on your

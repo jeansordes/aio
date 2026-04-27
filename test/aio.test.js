@@ -3,11 +3,18 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { Readable, Writable } = require("node:stream");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
 const { compareVersions, isUpdateCheckDisabled, shouldShowPassiveUpdateNotice } = require("../lib/update");
 const { main, routeCommand, updatePackage } = require("../lib/cli");
-const { configTemplate, detectTrackingCandidate, providerTemplate, setupProject } = require("../lib/setup");
+const {
+  chooseTrackingFile,
+  configTemplate,
+  detectTrackingCandidate,
+  providerTemplate,
+  setupProject,
+} = require("../lib/setup");
 const { evaluateCondition, normalizeProviderOutput, readConfigFile, runWorkflow } = require("../lib/workflow");
 const YAML = require("yaml");
 
@@ -254,6 +261,36 @@ test("detectInstallContext recognises global Bun installs from Bun's global bin 
   fs.mkdirSync(bunGlobalBin, { recursive: true });
   fs.writeFileSync(scriptPath, "#!/usr/bin/env node\n");
   fs.writeFileSync(invocationPath, "#!/usr/bin/env bash\n");
+
+  assert.equal(
+    detectInstallContext({
+      cwd: path.join(sandbox, "workspace"),
+      scriptPath,
+      invocationPath,
+      argv0: invocationPath,
+      env: {},
+      npmGlobalRoot: path.join(sandbox, "global-npm"),
+      bunGlobalBin,
+    }),
+    "global-bun",
+  );
+});
+
+test("detectInstallContext recognises global Bun installs invoked via Bun's symlinked bin shim", () => {
+  const sandbox = createSandbox();
+  const packageRoot = createPackage(
+    path.join(sandbox, "bun-install", "global", "node_modules"),
+    "@jeansordes",
+    "aio",
+  );
+  const scriptPath = path.join(packageRoot, "bin", "aio.js");
+  const bunGlobalBin = path.join(sandbox, "bun-bin");
+  const invocationPath = path.join(bunGlobalBin, "aio");
+
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.mkdirSync(bunGlobalBin, { recursive: true });
+  fs.writeFileSync(scriptPath, "#!/usr/bin/env node\n");
+  fs.symlinkSync(scriptPath, invocationPath);
 
   assert.equal(
     detectInstallContext({
@@ -602,6 +639,73 @@ test("detectTrackingCandidate returns first existing candidate in order", () => 
   fs.mkdirSync(path.join(sandbox, "specs"), { recursive: true });
   fs.writeFileSync(path.join(sandbox, "specs", "roadmap.csv"), "h");
   assert.equal(detectTrackingCandidate(sandbox), "specs/roadmap.csv");
+});
+
+test("interactive init Enter with no detection defaults to specs/roadmap.csv and scaffold", async () => {
+  const sandbox = createSandbox();
+  const stdin = Readable.from(["\n"]);
+  stdin.isTTY = true;
+  const chunks = [];
+  const stdout = new Writable({
+    write(chunk, _enc, cb) {
+      chunks.push(chunk.toString("utf8"));
+      cb();
+    },
+  });
+  stdout.isTTY = true;
+
+  const result = await chooseTrackingFile({
+    projectRoot: sandbox,
+    stdin,
+    stdout,
+    interactive: true,
+  });
+
+  assert.deepEqual(result, { file: "specs/roadmap.csv", scaffoldSpecs: true });
+  assert.match(chunks.join(""), /aio init/);
+});
+
+test("interactive init Enter uses detected tracking file without scaffold", async () => {
+  const sandbox = createSandbox();
+  fs.writeFileSync(path.join(sandbox, "TASKS.md"), "#\n");
+  const stdin = Readable.from(["\n"]);
+  stdin.isTTY = true;
+  const stdout = new Writable({
+    write(_chunk, _enc, cb) {
+      cb();
+    },
+  });
+  stdout.isTTY = true;
+
+  const result = await chooseTrackingFile({
+    projectRoot: sandbox,
+    stdin,
+    stdout,
+    interactive: true,
+  });
+
+  assert.deepEqual(result, { file: "TASKS.md", scaffoldSpecs: false });
+});
+
+test("interactive init n disables tracking", async () => {
+  const sandbox = createSandbox();
+  const stdin = Readable.from(["n\n"]);
+  stdin.isTTY = true;
+  const stdout = new Writable({
+    write(_chunk, _enc, cb) {
+      cb();
+    },
+  });
+  stdout.isTTY = true;
+
+  const result = await chooseTrackingFile({
+    projectRoot: sandbox,
+    stdin,
+    stdout,
+    interactive: true,
+  });
+
+  assert.deepEqual(result, { file: null, scaffoldSpecs: false });
 });
 
 test("aio run passes projectKnowledge.trackingFile from config to the provider", async () => {
