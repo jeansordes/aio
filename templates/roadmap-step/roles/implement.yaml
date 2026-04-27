@@ -1,0 +1,10 @@
+provider: cursor
+model: default
+instructions: |
+  Implement the in_progress roadmap requirement in projectKnowledge.trackingFile. Read the
+  spec file for that row if path is set. Make minimal changes that satisfy the requirement.
+  Record durable handoff notes in project files when needed; do not rely on stdout for later
+  agents.
+contextFiles:
+  - AGENTS.md
+  - specs/roadmap.csv

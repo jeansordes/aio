@@ -1,8 +1,0 @@
-provider: cursor
-model: default
-instructions: |
-  Address the failure in previous test output. Re-read relevant spec files under specs/.
-  When done, end with: {"status":"ok","content":"fix applied"}.
-contextFiles:
-  - AGENTS.md
-  - specs/roadmap.csv

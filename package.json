@@ -17,7 +17,9 @@
   },
   "files": [
     "bin",
+    "dev-bin",
     "lib",
+    "templates",
     "README.md",
     "CHANGELOG.md"
   ],

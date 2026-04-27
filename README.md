@@ -3,7 +3,7 @@
 Jean Sordes's AI Orchestrator CLI.
 
 `aio` scaffolds a project-local `.aio/` tree and runs YAML-defined workflows
-through replaceable provider wrapper scripts.
+through replaceable provider CLI configuration.
 
 ## Run
 
@@ -39,9 +39,29 @@ Run a named workflow from `.aio/workflows/<name>.yaml`:
 npx @jeansordes/aio run release
 ```
 
-This repository also ships a custom `roadmap-step` workflow (see
-`.aio/workflows/roadmap-step.yaml`) for executing one tracked roadmap item at a
-time with `aio run roadmap-step` once `cursor-agent` is available.
+This repository also ships a `roadmap-step` workflow template (see
+[`templates/roadmap-step/`](templates/roadmap-step/)) for executing one tracked
+roadmap item at a time. Copy `workflows/roadmap-step.yaml` and the matching role
+files under `roles/` into a target project's `.aio/` to use
+`aio run roadmap-step` once `cursor-agent` is available.
+
+## Develop this repo (daio)
+
+`daio` runs the **clone** in this directory so you can try changes without
+publishing, without replacing your globally installed `aio`. Add
+[`dev-bin/`](dev-bin) to your `PATH` (or symlink `dev-bin/daio` to a directory
+on your `PATH`):
+
+```bash
+export PATH="/path/to/aio/dev-bin:$PATH"
+```
+
+`daio` sets `AIO_NO_UPDATE_CHECK=1` and invokes `bin/aio.js` from the repo root.
+If `dev-bin/daio` is not marked executable in your environment, run
+`chmod +x dev-bin/daio` once, or call `sh dev-bin/daio` instead of `daio`.
+Run manual checks with real projects under the ignored `sandbox/` folder (for
+example `sandbox/manual-cli/`) so the repository root never holds a
+project-local `.aio/` tree.
 
 Check for a newer package version and update a supported global install:
 
@@ -82,23 +102,17 @@ or—if none exist—scaffolds the optional `specs/` layout (including
 scaffold `specs/` explicitly, or **`n`** for no file. In non-interactive runs
 (for example CI) init auto-detects those same paths; it does not create `specs/`.
 
-The generated `providers/cursor.sh` uses the
+The generated `.aio/providers.yaml` configures the
 [Cursor Agent CLI](https://cursor.com/docs/cli) (`cursor-agent` on your
-`PATH`, non-interactive `print` mode) so workflows can run without editing that
-file first. Set `CURSOR_API_KEY` in the environment (see Cursor docs) so the
-CLI can authenticate. Other provider wrappers are still placeholders until you
-replace them.
+`PATH`, non-interactive `print` mode) so workflows can run without provider
+scripts. Set `CURSOR_API_KEY` in the environment (see Cursor docs) so the CLI
+can authenticate. Other providers are `not_configured` entries until you edit
+the YAML.
 
 ```text
 .aio/
   config.yaml
-  providers/
-    cursor.sh
-    codex.sh
-    claude.sh
-    gemini.sh
-    opencode.sh
-    custom.sh
+  providers.yaml
   roles/
     analyse.yaml
     plan.yaml
@@ -116,16 +130,16 @@ replace them.
 
 Setup never overwrites existing files.
 
-Provider wrappers read a standard JSON request on stdin and write normalized
-JSON on stdout. The generated `cursor` wrapper calls `cursor-agent` as
-described above. The other provider scripts are placeholders that return a
-clear `not_configured` result until you edit them to call Codex, Claude, Gemini,
-OpenCode, or a custom tool.
+Provider entries define the command, arguments, prompt placement, and success
+exit codes for each external AI CLI. `aio` captures stdout and stderr as logs
+only; workflow state is derived from the process exit code and working-tree
+changes. Agents share durable state through project files, not through another
+agent's transcript or parsed AI JSON.
 
 Workflow execution loads `.aio/workflows/default.yaml` for `aio run` or a named
 workflow for `aio run <workflow>`. It starts at `initial`, executes each state's
-role through the configured provider wrapper, follows direct or simple
-conditional transitions, and stops at `type: final`.
+role through the configured provider, follows direct or simple conditional
+transitions, and stops at `type: final`.
 
 For installs aio recognizes as a **global npm, pnpm, or Bun** copy (it walks
 the running script and global paths), a normal `aio` command may compare your

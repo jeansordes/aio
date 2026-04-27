@@ -13,12 +13,12 @@ states:
   review:
     role: review
     next:
-      - if: review.status == "approved"
-        then: commit
-      - if: review.status == "not_configured"
+      - if: step.status == "not_configured"
         then: log
-      - if: git.has_changes == true
+      - if: step.has_changes == true
         then: fix
+      - if: step.exit_code == 0
+        then: commit
       - then: log
   fix:
     role: fix

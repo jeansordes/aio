@@ -1,4 +1,4 @@
-provider: custom
+provider: __AIO_DEFAULT_PROVIDER__
 model: default
 instructions: "Implement the planned change in the working tree."
 contextFiles: []

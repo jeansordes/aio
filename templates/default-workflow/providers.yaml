@@ -1,0 +1,42 @@
+version: 1
+providers:
+  cursor:
+    command: cursor-agent
+    args:
+      - "-p"
+      - "--force"
+      - "--trust"
+      - "--output-format"
+      - "text"
+      - "{{model_args}}"
+      - "{{prompt}}"
+    modelArgs:
+      - "--model"
+      - "{{model}}"
+    prompt:
+      include:
+        - instructions
+        - tracking_file
+        - context_files
+    success:
+      exit_codes: [0]
+
+  codex:
+    status: not_configured
+    message: "Provider codex is not configured. Edit .aio/providers.yaml."
+
+  claude:
+    status: not_configured
+    message: "Provider claude is not configured. Edit .aio/providers.yaml."
+
+  gemini:
+    status: not_configured
+    message: "Provider gemini is not configured. Edit .aio/providers.yaml."
+
+  opencode:
+    status: not_configured
+    message: "Provider opencode is not configured. Edit .aio/providers.yaml."
+
+  custom:
+    status: not_configured
+    message: "Provider custom is not configured. Edit .aio/providers.yaml."

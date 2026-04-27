@@ -12,11 +12,16 @@ const {
   chooseTrackingFile,
   configTemplate,
   detectTrackingCandidate,
-  providerTemplate,
+  INIT_NO_PROVIDER_ERROR,
+  providersConfigTemplate,
   setupProject,
 } = require("../lib/setup");
-const { evaluateCondition, normalizeProviderOutput, readConfigFile, runWorkflow } = require("../lib/workflow");
+const { evaluateCondition, normalizeProviderOutput, readConfigFile, readProvidersFile, runWorkflow } = require("../lib/workflow");
 const YAML = require("yaml");
+
+function withProbe(name) {
+  return { probeProvider: () => name };
+}
 
 test("shouldOfferUpdate only prompts for newer versions on global npm installs with a TTY", () => {
   assert.equal(
@@ -375,6 +380,7 @@ test("main routes commands after update gating without prompting in non-TTY runs
     installContext: "global-npm",
     stdinIsTTY: false,
     stdoutIsTTY: false,
+    probeProvider: () => "cursor",
     promptForUpdate: async () => {
       prompted = true;
       return false;
@@ -532,6 +538,7 @@ test("main skips startup update checks when AIO_NO_UPDATE_CHECK is set", async (
     stdinIsTTY: false,
     stdoutIsTTY: false,
     env: { AIO_NO_UPDATE_CHECK: "1" },
+    probeProvider: () => "cursor",
     promptForUpdate: async () => {
       prompted = true;
       return true;
@@ -566,16 +573,11 @@ test("shouldShowPassiveUpdateNotice and isUpdateCheckDisabled", () => {
 
 test("init creates the expected .aio structure without non-TTY specs scaffolding", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
 
   for (const entry of [
     ".aio/config.yaml",
-    ".aio/providers/cursor.sh",
-    ".aio/providers/codex.sh",
-    ".aio/providers/claude.sh",
-    ".aio/providers/gemini.sh",
-    ".aio/providers/opencode.sh",
-    ".aio/providers/custom.sh",
+    ".aio/providers.yaml",
     ".aio/roles/analyse.yaml",
     ".aio/roles/plan.yaml",
     ".aio/roles/build.yaml",
@@ -594,6 +596,34 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
   assert.equal(fs.existsSync(path.join(sandbox, "specs")), false);
   const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
   assert.equal(config.tracking.file, null);
+  const analyseRole = fs.readFileSync(path.join(sandbox, ".aio", "roles", "analyse.yaml"), "utf8");
+  assert.match(analyseRole, /^provider: cursor\n/m);
+});
+
+test("init fails when no provider CLI is detected and does not create .aio", async () => {
+  const sandbox = createSandbox();
+  await assert.rejects(
+    async () => setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, probeProvider: () => null }),
+    (err) => err instanceof Error && err.message === INIT_NO_PROVIDER_ERROR,
+  );
+  assert.equal(fs.existsSync(path.join(sandbox, ".aio")), false);
+});
+
+test("main init fails when probe finds no provider", async () => {
+  const sandbox = createSandbox();
+  await assert.rejects(
+    async () =>
+      main({
+        argv: ["init"],
+        projectRoot: sandbox,
+        latestVersion: false,
+        probeProvider: () => null,
+        stdinIsTTY: false,
+        stdoutIsTTY: false,
+      }),
+    (err) => err instanceof Error && err.message === INIT_NO_PROVIDER_ERROR,
+  );
+  assert.equal(fs.existsSync(path.join(sandbox, ".aio")), false);
 });
 
 test("non-interactive init writes detected tracking file from specs/roadmap.csv", async () => {
@@ -601,7 +631,7 @@ test("non-interactive init writes detected tracking file from specs/roadmap.csv"
   fs.mkdirSync(path.join(sandbox, "specs"), { recursive: true });
   fs.writeFileSync(path.join(sandbox, "specs", "roadmap.csv"), "id,title\n");
 
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
 
   const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
   assert.equal(config.tracking.file, "specs/roadmap.csv");
@@ -612,7 +642,7 @@ test("non-interactive init prefers first tracking candidate: TASKS.md over ROADM
   fs.writeFileSync(path.join(sandbox, "TASKS.md"), "#\n");
   fs.writeFileSync(path.join(sandbox, "ROADMAP.md"), "#\n");
 
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
 
   const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
   assert.equal(config.tracking.file, "TASKS.md");
@@ -624,11 +654,12 @@ test("configTemplate encodes tracking file or null", () => {
   assert.match(configTemplate(null), /workflow:\n  maxSteps: 100/);
 });
 
-test("providerTemplate for cursor uses cursor-agent headless flags", () => {
-  const body = providerTemplate("cursor");
-  assert.match(body, /cursor-agent/);
-  assert.match(body, /-p.*--force.*--trust/s);
-  assert.match(body, /--output-format.*json/);
+test("providersConfigTemplate configures cursor-agent headless flags", () => {
+  const config = YAML.parse(providersConfigTemplate());
+  assert.equal(config.providers.cursor.command, "cursor-agent");
+  assert.deepEqual(config.providers.cursor.args.slice(0, 5), ["-p", "--force", "--trust", "--output-format", "text"]);
+  assert.equal(config.providers.cursor.args.includes("{{prompt}}"), true);
+  assert.equal(config.providers.custom.status, "not_configured");
 });
 
 test("detectTrackingCandidate returns first existing candidate in order", () => {
@@ -710,12 +741,12 @@ test("interactive init n disables tracking", async () => {
 
 test("aio run passes projectKnowledge.trackingFile from config to the provider", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
   fs.writeFileSync(
     path.join(sandbox, ".aio", "config.yaml"),
     `version: 1
 defaultWorkflow: default
-providersDirectory: providers
+providersFile: providers.yaml
 rolesDirectory: roles
 workflowsDirectory: workflows
 workflow:
@@ -727,7 +758,7 @@ tracking:
   writeProvider(
     sandbox,
     "custom",
-    'process.stdout.write(JSON.stringify({ status: "ok", tracking: request.projectKnowledge && request.projectKnowledge.trackingFile }));',
+    'process.stdout.write(prompt);',
   );
   writeWorkflow(
     sandbox,
@@ -744,16 +775,17 @@ states:
   );
 
   const result = runWorkflow({ projectRoot: sandbox });
-  assert.equal(result.previousOutputs.analyse.tracking, "my-tracker.csv");
+  assert.match(result.outputs[0].stdout, /Tracking file: my-tracker\.csv/);
+  assert.doesNotMatch(result.outputs[0].stdout, /Previous outputs/);
 });
 
 test("setup is idempotent and does not overwrite changed files", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
   const configPath = path.join(sandbox, ".aio", "config.yaml");
   fs.writeFileSync(configPath, "version: custom\n");
 
-  const result = await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  const result = await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
 
   assert.equal(fs.readFileSync(configPath, "utf8"), "version: custom\n");
   assert.equal(result.skipped.includes(configPath), true);
@@ -761,7 +793,7 @@ test("setup is idempotent and does not overwrite changed files", async () => {
 
 test("TTY-style setup can scaffold optional specs files", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, scaffoldSpecs: true });
+  await setupProject({ projectRoot: sandbox, scaffoldSpecs: true, ...withProbe("cursor") });
 
   for (const entry of [
     "specs/roadmap.csv",
@@ -773,10 +805,10 @@ test("TTY-style setup can scaffold optional specs files", async () => {
   }
 });
 
-test("aio run executes default.yaml with linear transitions and parsed JSON output", async () => {
+test("aio run executes default.yaml with linear transitions and captured stdout", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
-  writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok", role: request.role }));');
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeProvider(sandbox, "custom", 'process.stdout.write("plain output");');
   writeWorkflow(
     sandbox,
     "default",
@@ -801,23 +833,59 @@ states:
     result.outputs.map((output) => output.role),
     ["analyse", "plan"],
   );
-  assert.equal(result.previousOutputs.analyse.status, "ok");
+  assert.equal(result.outputs[0].status, "ok");
+  assert.equal(result.outputs[0].stdout, "plain output");
+});
+
+test("aio run exposes file changes from the latest provider step", async () => {
+  const sandbox = createSandbox();
+  require("node:child_process").execFileSync("git", ["init"], { cwd: sandbox, stdio: "ignore" });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeProvider(sandbox, "custom", 'fs.writeFileSync(path.join(process.cwd(), "changed.txt"), "changed\\n");');
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: only
+states:
+  only:
+    role: analyse
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = runWorkflow({ projectRoot: sandbox });
+
+  assert.equal(result.outputs[0].has_changes, true);
+  assert.deepEqual(result.outputs[0].changed_files, ["changed.txt"]);
+});
+
+test("readProvidersFile loads declarative provider configuration", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
+
+  const providers = readProvidersFile(sandbox, { providersFile: "providers.yaml" });
+
+  assert.equal(providers.providers.cursor.command, "cursor-agent");
+  assert.equal(providers.providers.custom.status, "not_configured");
 });
 
 test("generated default workflow is runnable with placeholder providers", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("codex") });
 
   const result = runWorkflow({ projectRoot: sandbox });
 
   assert.equal(result.finalState, "done");
-  assert.equal(result.previousOutputs.review.status, "not_configured");
+  assert.equal(result.steps.review.status, "not_configured");
 });
 
 test("aio run custom-name loads a named workflow", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
-  writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok", workflow: request.workflow }));');
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeProvider(sandbox, "custom", 'process.stdout.write(prompt);');
   writeWorkflow(
     sandbox,
     "custom-name",
@@ -835,20 +903,16 @@ states:
   const result = runWorkflow({ projectRoot: sandbox, workflowName: "custom-name" });
 
   assert.equal(result.workflow, "custom-name");
-  assert.equal(result.previousOutputs.analyse.workflow, "custom-name");
+  assert.match(result.outputs[0].stdout, /Analyse the current project state/);
 });
 
-test("conditional transitions route by provider output and capture plain text stdout", async () => {
+test("conditional transitions route by step state and capture plain text stdout", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
   writeProvider(
     sandbox,
     "custom",
-    `if (request.role === "review") {
-  process.stdout.write(JSON.stringify({ status: "approved" }));
-} else {
-  process.stdout.write("plain text");
-}`,
+    `process.stdout.write("plain text");`,
   );
   writeWorkflow(
     sandbox,
@@ -862,7 +926,7 @@ states:
   review:
     role: review
     next:
-      - if: review.status == "approved"
+      - if: step.exit_code == 0
         then: commit
       - then: fix
   fix:
@@ -878,7 +942,7 @@ states:
 
   const result = runWorkflow({ projectRoot: sandbox });
 
-  assert.equal(result.outputs[0].output.content, "plain text");
+  assert.equal(result.outputs[0].stdout, "plain text");
   assert.deepEqual(
     result.outputs.map((output) => output.role),
     ["build", "review", "commit"],
@@ -887,7 +951,7 @@ states:
 
 test("conditional transitions can use git.has_changes in a temp git repo", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
   fs.writeFileSync(path.join(sandbox, "changed.txt"), "changed\n");
   require("node:child_process").execFileSync("git", ["init"], { cwd: sandbox, stdio: "ignore" });
   writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok" }));');
@@ -941,7 +1005,7 @@ test("readConfigFile rejects unknown keys, bad types, and invalid workflow.maxSt
     configPath,
     `version: 1
 defaultWorkflow: default
-providersDirectory: providers
+providersFile: providers.yaml
 rolesDirectory: roles
 workflowsDirectory: workflows
 tracking:
@@ -957,7 +1021,7 @@ tracking:
     configPath,
     `version: 1
 defaultWorkflow: default
-providersDirectory: providers
+providersFile: providers.yaml
 rolesDirectory: roles
 workflowsDirectory: workflows
 tracking:
@@ -974,14 +1038,14 @@ workflow:
 
 test("evaluateCondition warns once when a dot-path in an equality is missing", () => {
   const warnings = [];
-  const context = { git: { has_changes: false }, previousOutputs: { review: { status: "approved" } } };
+  const context = { git: { has_changes: false }, step: { status: "ok" } };
   const pass = (msg) => warnings.push(String(msg));
-  const ok = evaluateCondition(`review.status == "approved"`, context, { warn: pass });
-  const bad = evaluateCondition(`review.typo == "approved"`, context, { warn: pass });
+  const ok = evaluateCondition(`step.status == "ok"`, context, { warn: pass });
+  const bad = evaluateCondition(`step.typo == "ok"`, context, { warn: pass });
   assert.equal(ok, true);
   assert.equal(bad, false);
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /missing path: review\.typo/);
+  assert.match(warnings[0], /missing path: step\.typo/);
 });
 
 test("normalizeProviderOutput warns on invalid JSON and on non-object JSON", () => {
@@ -999,12 +1063,12 @@ test("normalizeProviderOutput warns on invalid JSON and on non-object JSON", () 
 
 test("runWorkflow respects config workflow.maxSteps", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("codex") });
   fs.writeFileSync(
     path.join(sandbox, ".aio", "config.yaml"),
     `version: 1
 defaultWorkflow: default
-providersDirectory: providers
+providersFile: providers.yaml
 rolesDirectory: roles
 workflowsDirectory: workflows
 workflow:
@@ -1034,21 +1098,33 @@ function createPackage(...segments) {
 }
 
 function writeProvider(projectRoot, provider, body) {
-  const providerPath = path.join(projectRoot, ".aio", "providers", `${provider}.sh`);
+  const providerPath = path.join(projectRoot, ".aio", `${provider}-provider.js`);
   fs.writeFileSync(
     providerPath,
-    `#!/usr/bin/env sh
-node -e '
-let input = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", chunk => input += chunk);
-process.stdin.on("end", () => {
-  const request = JSON.parse(input);
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const prompt = process.argv[2] || "";
   ${body}
-});
-'
 `,
     { mode: 0o755 },
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, ".aio", "providers.yaml"),
+    `version: 1
+providers:
+  ${provider}:
+    command: ${JSON.stringify(providerPath)}
+    args:
+      - "{{prompt}}"
+    prompt:
+      include:
+        - instructions
+        - tracking_file
+        - context_files
+    success:
+      exit_codes: [0]
+`,
   );
 }
 

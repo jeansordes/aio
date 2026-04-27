@@ -1,0 +1,7 @@
+provider: cursor
+model: default
+instructions: |
+  In the project root, run: node --test
+  Exit non-zero if tests fail. The workflow routes on the process exit code and file changes,
+  not on parsed stdout.
+contextFiles: []

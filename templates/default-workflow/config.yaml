@@ -1,7 +1,9 @@
 version: 1
 defaultWorkflow: default
-providersDirectory: providers
+providersFile: providers.yaml
 rolesDirectory: roles
 workflowsDirectory: workflows
+workflow:
+  maxSteps: 100
 tracking:
-  file: specs/roadmap.csv
+  file: __AIO_TRACKING_FILE__

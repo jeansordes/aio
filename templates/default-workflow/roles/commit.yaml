@@ -1,0 +1,4 @@
+provider: __AIO_DEFAULT_PROVIDER__
+model: default
+instructions: "Prepare or create the commit requested by the workflow."
+contextFiles: []

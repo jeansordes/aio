@@ -1,0 +1,10 @@
+provider: cursor
+model: default
+instructions: |
+  Follow AGENTS.md. Read the tracking CSV in projectKnowledge.trackingFile. Choose the next
+  work item: not blocked, highest priority, most concrete. Mark that row in_progress in the
+  tracking CSV so later agents can find it from project files. If nothing is actionable, make
+  no file changes and exit successfully.
+contextFiles:
+  - AGENTS.md
+  - specs/roadmap.csv

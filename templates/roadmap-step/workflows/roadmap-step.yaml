@@ -3,14 +3,17 @@ initial: pickRow
 states:
   pickRow:
     role: pick-row
-    next: implement
+    next:
+      - if: step.status == "ok"
+        then: implement
+      - then: done
   implement:
     role: implement
     next: test
   test:
     role: test
     next:
-      - if: test.status == "ok"
+      - if: step.exit_code == 0
         then: commit
       - then: fix
   fix:

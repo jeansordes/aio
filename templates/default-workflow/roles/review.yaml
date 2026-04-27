@@ -1,0 +1,4 @@
+provider: __AIO_DEFAULT_PROVIDER__
+model: default
+instructions: "Review the implementation. Make changes only when something needs fixing."
+contextFiles: []
