@@ -1,5 +1,12 @@
+## 0.6.0 (2026-04-27)
+
+* feat(workflow): validate config and improve runtime diagnostics ([5973b0a](https://github.com/jeansordes/aio/commit/5973b0a))
+* docs: adopt AGENTS.md and point roles at it ([b4b0086](https://github.com/jeansordes/aio/commit/b4b0086))
+* docs: document git push after releases and for shipping ([b764274](https://github.com/jeansordes/aio/commit/b764274))
+
 ## 0.5.0 (2026-04-25)
 
+* chore(release): v0.5.0 ([2798c65](https://github.com/jeansordes/aio/commit/2798c65))
 * feat(cli): harden update detection, pnpm, and passive notices ([fae2939](https://github.com/jeansordes/aio/commit/fae2939))
 
 ## 0.4.0 (2026-04-25)
