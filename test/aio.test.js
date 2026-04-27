@@ -5,10 +5,10 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
-const { isUpdateCheckDisabled, shouldShowPassiveUpdateNotice } = require("../lib/update");
+const { compareVersions, isUpdateCheckDisabled, shouldShowPassiveUpdateNotice } = require("../lib/update");
 const { main, routeCommand, updatePackage } = require("../lib/cli");
 const { configTemplate, detectTrackingCandidate, providerTemplate, setupProject } = require("../lib/setup");
-const { runWorkflow } = require("../lib/workflow");
+const { evaluateCondition, normalizeProviderOutput, readConfigFile, runWorkflow } = require("../lib/workflow");
 const YAML = require("yaml");
 
 test("shouldOfferUpdate only prompts for newer versions on global npm installs with a TTY", () => {
@@ -584,6 +584,7 @@ test("non-interactive init prefers first tracking candidate: TASKS.md over ROADM
 test("configTemplate encodes tracking file or null", () => {
   assert.match(configTemplate("specs/roadmap.csv"), /tracking:\n  file: specs\/roadmap\.csv/);
   assert.match(configTemplate(null), /tracking:\n  file: null/);
+  assert.match(configTemplate(null), /workflow:\n  maxSteps: 100/);
 });
 
 test("providerTemplate for cursor uses cursor-agent headless flags", () => {
@@ -613,6 +614,8 @@ defaultWorkflow: default
 providersDirectory: providers
 rolesDirectory: roles
 workflowsDirectory: workflows
+workflow:
+  maxSteps: 100
 tracking:
   file: my-tracker.csv
 `,
@@ -809,6 +812,106 @@ states:
   assert.deepEqual(
     result.outputs.map((output) => output.role),
     ["analyse", "log"],
+  );
+});
+
+test("compareVersions orders releases above prereleases and ranks prerelease identifiers", () => {
+  assert.equal(compareVersions("1.0.0", "1.0.0-rc.1"), 1);
+  assert.equal(compareVersions("1.0.0-rc.1", "1.0.0-rc.2"), -1);
+  assert.equal(compareVersions("1.0.0-rc.1", "1.0.0"), -1);
+  assert.equal(compareVersions("0.0.1", "0.0.1"), 0);
+});
+
+test("readConfigFile rejects unknown keys, bad types, and invalid workflow.maxSteps", () => {
+  const sandbox = createSandbox();
+  fs.mkdirSync(path.join(sandbox, ".aio"), { recursive: true });
+  const configPath = path.join(sandbox, ".aio", "config.yaml");
+
+  fs.writeFileSync(configPath, "extra: true\n");
+  assert.throws(
+    () => readConfigFile(sandbox),
+    (err) => err instanceof Error && err.message.includes('unknown key "extra"'),
+  );
+
+  fs.writeFileSync(
+    configPath,
+    `version: 1
+defaultWorkflow: default
+providersDirectory: providers
+rolesDirectory: roles
+workflowsDirectory: workflows
+tracking:
+  file: 99
+`,
+  );
+  assert.throws(
+    () => readConfigFile(sandbox),
+    (err) => err instanceof Error && err.message.includes("tracking.file") && err.message.includes("string"),
+  );
+
+  fs.writeFileSync(
+    configPath,
+    `version: 1
+defaultWorkflow: default
+providersDirectory: providers
+rolesDirectory: roles
+workflowsDirectory: workflows
+tracking:
+  file: null
+workflow:
+  maxSteps: 0
+`,
+  );
+  assert.throws(
+    () => readConfigFile(sandbox),
+    (err) => err instanceof Error && err.message.includes("workflow.maxSteps") && err.message.includes("positive"),
+  );
+});
+
+test("evaluateCondition warns once when a dot-path in an equality is missing", () => {
+  const warnings = [];
+  const context = { git: { has_changes: false }, previousOutputs: { review: { status: "approved" } } };
+  const pass = (msg) => warnings.push(String(msg));
+  const ok = evaluateCondition(`review.status == "approved"`, context, { warn: pass });
+  const bad = evaluateCondition(`review.typo == "approved"`, context, { warn: pass });
+  assert.equal(ok, true);
+  assert.equal(bad, false);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /missing path: review\.typo/);
+});
+
+test("normalizeProviderOutput warns on invalid JSON and on non-object JSON", () => {
+  const warnings = [];
+  const pass = (m) => warnings.push(m);
+  const notJson = normalizeProviderOutput("not json at all", { warn: pass });
+  assert.equal(notJson.status, "ok");
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /not valid JSON/);
+  const arr = normalizeProviderOutput("[1,2,3]", { warn: pass });
+  assert.equal(arr.status, "ok");
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[1], /plain object was expected/);
+});
+
+test("runWorkflow respects config workflow.maxSteps", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false });
+  fs.writeFileSync(
+    path.join(sandbox, ".aio", "config.yaml"),
+    `version: 1
+defaultWorkflow: default
+providersDirectory: providers
+rolesDirectory: roles
+workflowsDirectory: workflows
+workflow:
+  maxSteps: 1
+tracking:
+  file: null
+`,
+  );
+  assert.throws(
+    () => runWorkflow({ projectRoot: sandbox, warn: () => {} }),
+    (err) => err instanceof Error && err.message.includes("exceeded 1 steps"),
   );
 });
 
