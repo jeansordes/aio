@@ -6,6 +6,6 @@ instructions: |
   {"status":"skipped","content":"no commit"}. If you committed, reply with
   {"status":"ok","content":"commit created"}.
 contextFiles:
-  - AGENT.md
+  - AGENTS.md
   - specs/roadmap.csv
   - .agents/skills/commit-conventional/SKILL.md

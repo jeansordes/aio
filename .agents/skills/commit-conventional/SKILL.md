@@ -10,7 +10,7 @@ completed and the work needs its own conventional commit.
 
 Read first:
 
-1. `AGENT.md`
+1. `AGENTS.md`
 2. `specs/roadmap.csv`
 3. The touched requirement spec file(s)
 

@@ -6,5 +6,5 @@ instructions: |
   requirement. When done, end with a single JSON line:
   {"status":"ok","summary":"<short description>"} or {"status":"failed","content":"<what blocked you>"}.
 contextFiles:
-  - AGENT.md
+  - AGENTS.md
   - specs/roadmap.csv
