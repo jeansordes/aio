@@ -3,7 +3,15 @@ defaultWorkflow: default
 providersFile: providers.yaml
 rolesDirectory: roles
 workflowsDirectory: workflows
+defaults:
+  provider: __AIO_DEFAULT_PROVIDER__
 workflow:
   maxSteps: 100
 tracking:
   file: __AIO_TRACKING_FILE__
+
+# Optional: Discord notifications read DISCORD_WEBHOOK_URL and DISCORD_MENTION_USER_ID
+# from .aio/.env (created by aio init when you opt in).
+# notifications:
+#   discord:
+#     enabled: true

@@ -7,7 +7,8 @@ const { Readable, Writable } = require("node:stream");
 
 const { detectInstallContext, getUpdateCommand, shouldOfferUpdate } = require("../bin/aio.js");
 const { compareVersions, isUpdateCheckDisabled, shouldShowPassiveUpdateNotice } = require("../lib/update");
-const { main, routeCommand, updatePackage } = require("../lib/cli");
+const { getDevBuildInfo } = require("../lib/build-info");
+const { getHelpText, main, parseRunArgs, routeCommand, updatePackage, wantsVersionOnly } = require("../lib/cli");
 const {
   chooseTrackingFile,
   configTemplate,
@@ -16,11 +17,34 @@ const {
   providersConfigTemplate,
   setupProject,
 } = require("../lib/setup");
-const { evaluateCondition, normalizeProviderOutput, readConfigFile, readProvidersFile, runWorkflow } = require("../lib/workflow");
+const {
+  evaluateCondition,
+  normalizeProviderOutput,
+  parseStateSummary,
+  readConfigFile,
+  readProvidersFile,
+  runWorkflow,
+} = require("../lib/workflow");
+const { readLatestRunId } = require("../lib/observe");
+const { mergeEnvFile, readEnvFile } = require("../lib/env-file");
 const YAML = require("yaml");
 
 function withProbe(name) {
   return { probeProvider: () => name };
+}
+
+function withProbes(names) {
+  return { probeProviders: () => names };
+}
+
+function skipDiscordInquirer() {
+  return {
+    select: async () => {
+      throw new Error("unexpected select");
+    },
+    confirm: async () => false,
+    input: async () => "",
+  };
 }
 
 test("shouldOfferUpdate only prompts for newer versions on global npm installs with a TTY", () => {
@@ -392,6 +416,62 @@ test("main routes commands after update gating without prompting in non-TTY runs
   assert.equal(result.scaffoldSpecs, false);
 });
 
+test("getDevBuildInfo returns null unless AIO_DEV=1", () => {
+  assert.equal(getDevBuildInfo({ env: {} }), null);
+  assert.equal(getDevBuildInfo({ env: { AIO_DEV: "0" } }), null);
+  const info = getDevBuildInfo({ env: { AIO_DEV: "1" } });
+  assert.ok(info && typeof info.dirty === "boolean");
+});
+
+test("getHelpText appends dev suffix when devInfo is passed", () => {
+  const text = getHelpText({
+    devInfo: { commit: "abc1234", dirty: true, committedAt: "2026-04-27T22:00:00.000Z" },
+  });
+  assert.match(text, /\(dev abc1234, 2026-04-27, dirty\)/);
+});
+
+test("wantsVersionOnly recognises version flags as first argument", () => {
+  assert.equal(wantsVersionOnly(["version"]), true);
+  assert.equal(wantsVersionOnly(["--version"]), true);
+  assert.equal(wantsVersionOnly(["-v"]), true);
+  assert.equal(wantsVersionOnly(["run", "-v"]), false);
+});
+
+test("routeCommand prints version block", async () => {
+  const result = await routeCommand(["version"], {
+    currentVersion: "1.2.3",
+    installContext: "local",
+    devInfo: null,
+  });
+  assert.match(result.version, /@jeansordes\/aio 1\.2\.3/);
+  assert.match(result.version, /install: local/);
+});
+
+test("routeCommand treats --version like version", async () => {
+  const result = await routeCommand(["--version"], {
+    currentVersion: "0.0.0",
+    installContext: "npx",
+    devInfo: null,
+  });
+  assert.match(result.version, /install: npx/);
+});
+
+test("main does not emit passive update when AIO_DEV is set", async () => {
+  const noted = [];
+  await main({
+    argv: ["help"],
+    installContext: "unknown",
+    latestVersion: "9.9.9",
+    currentVersion: "0.0.1",
+    stderrIsTTY: true,
+    env: { AIO_DEV: "1" },
+    onPassiveUpdateNotice: (message) => {
+      noted.push(message);
+    },
+  });
+  assert.equal(noted.length, 0);
+});
+
 test("routeCommand prints man-style help for bare aio, help, -h, and --help", async () => {
   const opts = { latestVersion: false };
   const noArgs = (await routeCommand([], opts)).message;
@@ -409,6 +489,7 @@ test("routeCommand prints man-style help for bare aio, help, -h, and --help", as
   assert.match(noArgs, /VERSION/);
   assert.match(noArgs, /aio init/);
   assert.match(noArgs, /aio run/);
+  assert.match(noArgs, /aio observe/);
   assert.match(noArgs, /aio update/);
 });
 
@@ -589,6 +670,7 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
     ".aio/workflows/default.yaml",
     ".aio/prompts",
     ".aio/schemas",
+    ".aio/.gitignore",
   ]) {
     assert.equal(fs.existsSync(path.join(sandbox, entry)), true, `${entry} should exist`);
   }
@@ -596,6 +678,7 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
   assert.equal(fs.existsSync(path.join(sandbox, "specs")), false);
   const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
   assert.equal(config.tracking.file, null);
+  assert.equal(config.defaults.provider, "cursor");
   const analyseRole = fs.readFileSync(path.join(sandbox, ".aio", "roles", "analyse.yaml"), "utf8");
   assert.match(analyseRole, /^provider: cursor\n/m);
 });
@@ -652,6 +735,7 @@ test("configTemplate encodes tracking file or null", () => {
   assert.match(configTemplate("specs/roadmap.csv"), /tracking:\n  file: specs\/roadmap\.csv/);
   assert.match(configTemplate(null), /tracking:\n  file: null/);
   assert.match(configTemplate(null), /workflow:\n  maxSteps: 100/);
+  assert.match(configTemplate(null), /defaults:\n  provider: cursor/);
 });
 
 test("providersConfigTemplate configures cursor-agent headless flags", () => {
@@ -660,6 +744,71 @@ test("providersConfigTemplate configures cursor-agent headless flags", () => {
   assert.deepEqual(config.providers.cursor.args.slice(0, 5), ["-p", "--force", "--trust", "--output-format", "text"]);
   assert.equal(config.providers.cursor.args.includes("{{prompt}}"), true);
   assert.equal(config.providers.custom.status, "not_configured");
+});
+
+test("non-interactive init picks first detected provider when several are probed", async () => {
+  const sandbox = createSandbox();
+  const result = await setupProject({
+    projectRoot: sandbox,
+    stdinIsTTY: false,
+    stdoutIsTTY: false,
+    trackingFile: null,
+    scaffoldSpecs: false,
+    ...withProbes(["codex", "cursor"]),
+  });
+  assert.equal(result.defaultProvider, "codex");
+  const cfg = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
+  assert.equal(cfg.defaults.provider, "codex");
+});
+
+test("explicit defaultProvider must be among detected list", async () => {
+  const sandbox = createSandbox();
+  await assert.rejects(
+    async () =>
+      setupProject({
+        projectRoot: sandbox,
+        stdinIsTTY: false,
+        stdoutIsTTY: false,
+        trackingFile: null,
+        scaffoldSpecs: false,
+        ...withProbe("cursor"),
+        defaultProvider: "claude",
+      }),
+    (err) => err instanceof Error && err.message.includes("not among detected"),
+  );
+});
+
+test("interactive init chooses provider via arrow-key select", async () => {
+  const sandbox = createSandbox();
+  const chunks = [];
+  const stdout = new Writable({
+    write(chunk, _enc, cb) {
+      chunks.push(chunk.toString("utf8"));
+      cb();
+    },
+  });
+  stdout.isTTY = true;
+
+  const result = await setupProject({
+    projectRoot: sandbox,
+    stdinIsTTY: true,
+    stdoutIsTTY: true,
+    stdin: Readable.from([]),
+    stdout,
+    trackingFile: null,
+    scaffoldSpecs: false,
+    ...withProbes(["cursor", "codex"]),
+    inquirer: {
+      ...skipDiscordInquirer(),
+      select: async (opts) => {
+        if (String(opts.message).includes("tasks")) return "none";
+        return "codex";
+      },
+    },
+  });
+
+  assert.equal(result.defaultProvider, "codex");
+  assert.match(chunks.join(""), /Detected provider CLIs/);
 });
 
 test("detectTrackingCandidate returns first existing candidate in order", () => {
@@ -672,10 +821,8 @@ test("detectTrackingCandidate returns first existing candidate in order", () => 
   assert.equal(detectTrackingCandidate(sandbox), "specs/roadmap.csv");
 });
 
-test("interactive init Enter with no detection defaults to specs/roadmap.csv and scaffold", async () => {
+test("interactive init with no detection defaults to specs/roadmap.csv and scaffold", async () => {
   const sandbox = createSandbox();
-  const stdin = Readable.from(["\n"]);
-  stdin.isTTY = true;
   const chunks = [];
   const stdout = new Writable({
     write(chunk, _enc, cb) {
@@ -687,20 +834,21 @@ test("interactive init Enter with no detection defaults to specs/roadmap.csv and
 
   const result = await chooseTrackingFile({
     projectRoot: sandbox,
-    stdin,
+    stdin: Readable.from([]),
     stdout,
     interactive: true,
+    inquirer: {
+      select: async () => "scaffold",
+    },
   });
 
   assert.deepEqual(result, { file: "specs/roadmap.csv", scaffoldSpecs: true });
   assert.match(chunks.join(""), /aio init/);
 });
 
-test("interactive init Enter uses detected tracking file without scaffold", async () => {
+test("interactive init keeps detected tracking file without scaffold", async () => {
   const sandbox = createSandbox();
   fs.writeFileSync(path.join(sandbox, "TASKS.md"), "#\n");
-  const stdin = Readable.from(["\n"]);
-  stdin.isTTY = true;
   const stdout = new Writable({
     write(_chunk, _enc, cb) {
       cb();
@@ -710,18 +858,19 @@ test("interactive init Enter uses detected tracking file without scaffold", asyn
 
   const result = await chooseTrackingFile({
     projectRoot: sandbox,
-    stdin,
+    stdin: Readable.from([]),
     stdout,
     interactive: true,
+    inquirer: {
+      select: async () => "keep",
+    },
   });
 
   assert.deepEqual(result, { file: "TASKS.md", scaffoldSpecs: false });
 });
 
-test("interactive init n disables tracking", async () => {
+test("interactive init can disable tracking", async () => {
   const sandbox = createSandbox();
-  const stdin = Readable.from(["n\n"]);
-  stdin.isTTY = true;
   const stdout = new Writable({
     write(_chunk, _enc, cb) {
       cb();
@@ -731,9 +880,12 @@ test("interactive init n disables tracking", async () => {
 
   const result = await chooseTrackingFile({
     projectRoot: sandbox,
-    stdin,
+    stdin: Readable.from([]),
     stdout,
     interactive: true,
+    inquirer: {
+      select: async () => "none",
+    },
   });
 
   assert.deepEqual(result, { file: null, scaffoldSpecs: false });
@@ -774,7 +926,7 @@ states:
 `,
   );
 
-  const result = runWorkflow({ projectRoot: sandbox });
+  const result = await runWorkflow({ projectRoot: sandbox });
   assert.match(result.outputs[0].stdout, /Tracking file: my-tracker\.csv/);
   assert.doesNotMatch(result.outputs[0].stdout, /Previous outputs/);
 });
@@ -793,7 +945,13 @@ test("setup is idempotent and does not overwrite changed files", async () => {
 
 test("TTY-style setup can scaffold optional specs files", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, scaffoldSpecs: true, ...withProbe("cursor") });
+  await setupProject({
+    projectRoot: sandbox,
+    scaffoldSpecs: true,
+    stdinIsTTY: false,
+    stdoutIsTTY: false,
+    ...withProbe("cursor"),
+  });
 
   for (const entry of [
     "specs/roadmap.csv",
@@ -826,7 +984,7 @@ states:
 `,
   );
 
-  const result = runWorkflow({ projectRoot: sandbox });
+  const result = await runWorkflow({ projectRoot: sandbox });
 
   assert.equal(result.finalState, "done");
   assert.deepEqual(
@@ -856,7 +1014,7 @@ states:
 `,
   );
 
-  const result = runWorkflow({ projectRoot: sandbox });
+  const result = await runWorkflow({ projectRoot: sandbox });
 
   assert.equal(result.outputs[0].has_changes, true);
   assert.deepEqual(result.outputs[0].changed_files, ["changed.txt"]);
@@ -876,7 +1034,7 @@ test("generated default workflow is runnable with placeholder providers", async 
   const sandbox = createSandbox();
   await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("codex") });
 
-  const result = runWorkflow({ projectRoot: sandbox });
+  const result = await runWorkflow({ projectRoot: sandbox });
 
   assert.equal(result.finalState, "done");
   assert.equal(result.steps.review.status, "not_configured");
@@ -900,7 +1058,7 @@ states:
 `,
   );
 
-  const result = runWorkflow({ projectRoot: sandbox, workflowName: "custom-name" });
+  const result = await runWorkflow({ projectRoot: sandbox, workflowName: "custom-name" });
 
   assert.equal(result.workflow, "custom-name");
   assert.match(result.outputs[0].stdout, /Analyse the current project state/);
@@ -940,7 +1098,7 @@ states:
 `,
   );
 
-  const result = runWorkflow({ projectRoot: sandbox });
+  const result = await runWorkflow({ projectRoot: sandbox });
 
   assert.equal(result.outputs[0].stdout, "plain text");
   assert.deepEqual(
@@ -975,7 +1133,7 @@ states:
 `,
   );
 
-  const result = runWorkflow({ projectRoot: sandbox });
+  const result = await runWorkflow({ projectRoot: sandbox });
 
   assert.deepEqual(
     result.outputs.map((output) => output.role),
@@ -1034,6 +1192,24 @@ workflow:
     () => readConfigFile(sandbox),
     (err) => err instanceof Error && err.message.includes("workflow.maxSteps") && err.message.includes("positive"),
   );
+
+  fs.writeFileSync(
+    configPath,
+    `version: 1
+defaultWorkflow: default
+providersFile: providers.yaml
+rolesDirectory: roles
+workflowsDirectory: workflows
+defaults:
+  provider: 99
+tracking:
+  file: null
+`,
+  );
+  assert.throws(
+    () => readConfigFile(sandbox),
+    (err) => err instanceof Error && err.message.includes("defaults.provider") && err.message.includes("string"),
+  );
 });
 
 test("evaluateCondition warns once when a dot-path in an equality is missing", () => {
@@ -1077,10 +1253,89 @@ tracking:
   file: null
 `,
   );
-  assert.throws(
-    () => runWorkflow({ projectRoot: sandbox, warn: () => {} }),
+  await assert.rejects(
+    async () => runWorkflow({ projectRoot: sandbox, warn: () => {} }),
     (err) => err instanceof Error && err.message.includes("exceeded 1 steps"),
   );
+});
+
+test("parseRunArgs separates flags and workflow name", () => {
+  assert.deepEqual(parseRunArgs(["--quiet", "release"]), { quiet: true, workflowName: "release" });
+  assert.deepEqual(parseRunArgs(["-q", "default"]), { quiet: true, workflowName: "default" });
+});
+
+test("parseStateSummary accepts boolean and object forms", () => {
+  assert.deepEqual(parseStateSummary({ summary: true }), { enabled: true, prompt: null });
+  assert.deepEqual(parseStateSummary({ summary: { enabled: true, prompt: "x" } }), { enabled: true, prompt: "x" });
+  assert.equal(parseStateSummary({ summary: { enabled: false } })?.enabled, false);
+});
+
+test("workflow state summary runs a second provider call when main succeeds", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  const countPath = path.join(sandbox, "provider-invocations.txt");
+  writeProvider(
+    sandbox,
+    "custom",
+    `fs.appendFileSync(${JSON.stringify(countPath)}, "x");
+if (prompt.includes("plain text only")) {
+  process.stdout.write("SUMMARY_OUT");
+} else {
+  process.stdout.write("main-out");
+}`,
+  );
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: only
+states:
+  only:
+    role: analyse
+    summary:
+      enabled: true
+      prompt: "summarize in one word"
+    next: done
+  done:
+    type: final
+`,
+  );
+
+  const result = await runWorkflow({ projectRoot: sandbox });
+  assert.equal(fs.readFileSync(countPath, "utf8").length, 2);
+  assert.match(result.outputs[0].stdout, /main-out/);
+  assert.equal(result.outputs[0].summary, "SUMMARY_OUT");
+});
+
+test("run writes conversation log and latest pointer", async () => {
+  const sandbox = createSandbox();
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeProvider(sandbox, "custom", 'process.stdout.write("x");');
+  writeWorkflow(
+    sandbox,
+    "default",
+    `name: default
+initial: only
+states:
+  only:
+    role: analyse
+    next: done
+  done:
+    type: final
+`,
+  );
+  await routeCommand(["run"], { projectRoot: sandbox, latestVersion: false });
+  const runId = readLatestRunId(path.join(sandbox, ".aio", "runs"));
+  assert.ok(runId);
+  const conv = fs.readFileSync(path.join(sandbox, ".aio", "runs", runId, "conversation.log"), "utf8");
+  assert.match(conv, /x/);
+});
+
+test("mergeEnvFile round-trips webhook secrets", () => {
+  const sandbox = createSandbox();
+  mergeEnvFile(sandbox, { DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/abc" });
+  const env = readEnvFile(path.join(sandbox, ".aio", ".env"));
+  assert.equal(env.DISCORD_WEBHOOK_URL, "https://discord.com/api/webhooks/abc");
 });
 
 function createSandbox() {

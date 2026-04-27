@@ -6,6 +6,8 @@ states:
     next: plan
   plan:
     role: plan
+    summary:
+      enabled: true
     next: build
   build:
     role: build
