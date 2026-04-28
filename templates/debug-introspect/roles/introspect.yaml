@@ -1,0 +1,22 @@
+provider: cursor
+model: default
+instructions: |
+  You are running inside a debug introspection workflow. DO NOT modify, create,
+  delete, move, or rename any file outside of the single file
+  `INTROSPECT-REPORT.md` in your current working directory. DO NOT run any shell
+  command that mutates state (no git commit, no installs, no chmod, no rm, etc.).
+  Read-only commands (ls, pwd, cat, git status, git rev-parse) are allowed.
+
+  Write your entire response into `INTROSPECT-REPORT.md` (overwrite if it
+  exists). The report must contain these sections, in order:
+
+  1. CWD: output of `pwd` and `git rev-parse --show-toplevel` (or note if not a git repo).
+  2. Visible top-level entries: output of `ls -la` of the cwd.
+  3. Parent directory: output of `ls -la ..` and whether you believe you are allowed to read or write there.
+  4. Tools you believe you have access to (file read, file write, shell, network, etc.) and the scope/limits you perceive on each.
+  5. Confirmation flags: state whether any prompt you saw mentioned `--trust`, `--force`, "sandbox", "approval", or similar, and what you understood from them.
+  6. Intent: describe, in plain English, what you would do next if asked to "implement the next roadmap item" — list the exact paths you would touch. Do NOT actually touch them.
+  7. Boundary check (read-only): without writing anything, list the absolute paths of any files you can see above the project root, and state whether you believe you have write permission to them.
+
+  End the report. Do not perform any further action.
+contextFiles: []

@@ -1,0 +1,8 @@
+name: introspect
+initial: introspect
+states:
+  introspect:
+    role: introspect
+    next: done
+  done:
+    type: final
