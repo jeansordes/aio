@@ -7,9 +7,16 @@ providers:
       - "--force"
       - "--trust"
       - "--output-format"
-      - "text"
+      - "stream-json"
+      - "--stream-partial-output"
+      - "{{isolation_args}}"
       - "{{model_args}}"
       - "{{prompt}}"
+    isolationArgs:
+      - "--workspace"
+      - "{{project_root}}"
+      - "--sandbox"
+      - "enabled"
     modelArgs:
       - "--model"
       - "{{model}}"
@@ -24,19 +31,34 @@ providers:
   codex:
     status: not_configured
     message: "Provider codex is not configured. Edit .aio/providers.yaml."
+    # isolationArgs:  # uncomment and add flags your CLI supports to confine scope
+    #   - "--example-workspace"
+    #   - "{{project_root}}"
 
   claude:
     status: not_configured
     message: "Provider claude is not configured. Edit .aio/providers.yaml."
+    # isolationArgs:
+    #   - "--example-flag"
+    #   - "{{project_root}}"
 
   gemini:
     status: not_configured
     message: "Provider gemini is not configured. Edit .aio/providers.yaml."
+    # isolationArgs:
+    #   - "--example-flag"
+    #   - "{{project_root}}"
 
   opencode:
     status: not_configured
     message: "Provider opencode is not configured. Edit .aio/providers.yaml."
+    # isolationArgs:
+    #   - "--example-flag"
+    #   - "{{project_root}}"
 
   custom:
     status: not_configured
     message: "Provider custom is not configured. Edit .aio/providers.yaml."
+    # isolationArgs:
+    #   - "--example-flag"
+    #   - "{{project_root}}"

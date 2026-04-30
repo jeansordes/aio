@@ -6,8 +6,6 @@ states:
     next: plan
   plan:
     role: plan
-    summary:
-      enabled: true
     next: build
   build:
     role: build
@@ -33,6 +31,9 @@ states:
     next: publish
   publish:
     role: publish
+    next: summarize
+  summarize:
+    role: summarize
     next: done
   done:
     type: final

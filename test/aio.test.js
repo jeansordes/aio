@@ -19,12 +19,13 @@ const {
 } = require("../lib/setup");
 const {
   evaluateCondition,
+  buildProviderArgs,
   normalizeProviderOutput,
-  parseStateSummary,
   readConfigFile,
   readProvidersFile,
   runWorkflow,
 } = require("../lib/workflow");
+const { assistantVisibleText, tryParseStreamJsonLine } = require("../lib/term-sink");
 const { readLatestRunId } = require("../lib/observe");
 const { mergeEnvFile, readEnvFile } = require("../lib/env-file");
 const YAML = require("yaml");
@@ -667,6 +668,7 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
     ".aio/roles/log.yaml",
     ".aio/roles/commit.yaml",
     ".aio/roles/publish.yaml",
+    ".aio/roles/summarize.yaml",
     ".aio/workflows/default.yaml",
     ".aio/prompts",
     ".aio/schemas",
@@ -738,11 +740,20 @@ test("configTemplate encodes tracking file or null", () => {
   assert.match(configTemplate(null), /defaults:\n  provider: cursor/);
 });
 
-test("providersConfigTemplate configures cursor-agent headless flags", () => {
+test("providersConfigTemplate configures cursor-agent stream-json and isolation placeholder", () => {
   const config = YAML.parse(providersConfigTemplate());
   assert.equal(config.providers.cursor.command, "cursor-agent");
-  assert.deepEqual(config.providers.cursor.args.slice(0, 5), ["-p", "--force", "--trust", "--output-format", "text"]);
+  assert.deepEqual(config.providers.cursor.args.slice(0, 6), [
+    "-p",
+    "--force",
+    "--trust",
+    "--output-format",
+    "stream-json",
+    "--stream-partial-output",
+  ]);
+  assert.equal(config.providers.cursor.args.includes("{{isolation_args}}"), true);
   assert.equal(config.providers.cursor.args.includes("{{prompt}}"), true);
+  assert.equal(Array.isArray(config.providers.cursor.isolationArgs), true);
   assert.equal(config.providers.custom.status, "not_configured");
 });
 
@@ -1259,31 +1270,146 @@ tracking:
   );
 });
 
-test("parseRunArgs separates flags and workflow name", () => {
-  assert.deepEqual(parseRunArgs(["--quiet", "release"]), { quiet: true, workflowName: "release" });
-  assert.deepEqual(parseRunArgs(["-q", "default"]), { quiet: true, workflowName: "default" });
+test("parseRunArgs parses flags, workflow, and loop count", () => {
+  assert.deepEqual(parseRunArgs(["--quiet", "release"]), {
+    quiet: true,
+    verbose: false,
+    allowEditsOutsideDir: false,
+    workflowName: "release",
+    loops: 1,
+  });
+  assert.deepEqual(parseRunArgs(["-q", "default"]), {
+    quiet: true,
+    verbose: false,
+    allowEditsOutsideDir: false,
+    workflowName: "default",
+    loops: 1,
+  });
+  assert.deepEqual(parseRunArgs(["3"]), {
+    quiet: false,
+    verbose: false,
+    allowEditsOutsideDir: false,
+    workflowName: "default",
+    loops: 3,
+  });
+  assert.deepEqual(parseRunArgs(["release", "5"]), {
+    quiet: false,
+    verbose: false,
+    allowEditsOutsideDir: false,
+    workflowName: "release",
+    loops: 5,
+  });
+  assert.deepEqual(parseRunArgs(["--loops", "2", "wf"]), {
+    quiet: false,
+    verbose: false,
+    allowEditsOutsideDir: false,
+    workflowName: "wf",
+    loops: 2,
+  });
+  assert.deepEqual(parseRunArgs(["-n", "0"]), {
+    quiet: false,
+    verbose: false,
+    allowEditsOutsideDir: false,
+    workflowName: "default",
+    loops: 0,
+  });
 });
 
-test("parseStateSummary accepts boolean and object forms", () => {
-  assert.deepEqual(parseStateSummary({ summary: true }), { enabled: true, prompt: null });
-  assert.deepEqual(parseStateSummary({ summary: { enabled: true, prompt: "x" } }), { enabled: true, prompt: "x" });
-  assert.equal(parseStateSummary({ summary: { enabled: false } })?.enabled, false);
+test("parseRunArgs rejects conflicting loop specifications", () => {
+  assert.throws(
+    () => parseRunArgs(["--loops", "3", "5"]),
+    (err) => err instanceof Error && err.message.includes("numeric loop count"),
+  );
+  assert.throws(
+    () => parseRunArgs(["a", "b", "c"]),
+    (err) => err instanceof Error && err.message.includes("too many positional"),
+  );
 });
 
-test("workflow state summary runs a second provider call when main succeeds", async () => {
+test("buildProviderArgs expands isolationArgs and honors allowEditsOutsideDir", () => {
+  const provider = {
+    args: ["{{isolation_args}}", "-x", "{{project_root}}"],
+    isolationArgs: ["--workspace", "{{project_root}}"],
+  };
+  assert.deepEqual(
+    buildProviderArgs(provider, {
+      prompt: "p",
+      model: "default",
+      projectRoot: "/proj",
+      allowEditsOutsideDir: false,
+    }),
+    ["--workspace", "/proj", "-x", "/proj"],
+  );
+  assert.deepEqual(
+    buildProviderArgs(provider, {
+      prompt: "p",
+      model: "default",
+      projectRoot: "/proj",
+      allowEditsOutsideDir: true,
+    }),
+    ["-x", "/proj"],
+  );
+});
+
+test("readProvidersFile rejects bad isolationArgs entries", () => {
+  const sandbox = createSandbox();
+  fs.mkdirSync(path.join(sandbox, ".aio"), { recursive: true });
+  fs.writeFileSync(
+    path.join(sandbox, ".aio", "providers.yaml"),
+    `version: 1
+providers:
+  x:
+    command: echo
+    args: []
+    isolationArgs: [1]
+`,
+  );
+  assert.throws(
+    () => readProvidersFile(sandbox),
+    (err) => err instanceof Error && err.message.includes("isolationArgs"),
+  );
+});
+
+test("assistantVisibleText skips duplicate partial assistant events", () => {
+  assert.equal(
+    assistantVisibleText({
+      type: "assistant",
+      timestamp_ms: 1,
+      model_call_id: "dup",
+      message: { content: [{ type: "text", text: "a" }] },
+    }),
+    null,
+  );
+  assert.equal(
+    assistantVisibleText({
+      type: "assistant",
+      timestamp_ms: 1,
+      message: { content: [{ type: "text", text: "delta" }] },
+    }),
+    "delta",
+  );
+});
+
+test("tryParseStreamJsonLine accepts NDJSON objects", () => {
+  const ev = tryParseStreamJsonLine('{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}');
+  assert.equal(ev?.type, "assistant");
+  assert.equal(tryParseStreamJsonLine("not json"), null);
+});
+
+test("init writes empty AGENTS.md when nested in another git repository", async () => {
+  const sandbox = createSandbox();
+  require("node:child_process").execFileSync("git", ["init"], { cwd: sandbox, stdio: "ignore" });
+  const nested = path.join(sandbox, "nested");
+  fs.mkdirSync(nested, { recursive: true });
+  await setupProject({ projectRoot: nested, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("cursor") });
+  assert.equal(fs.existsSync(path.join(nested, "AGENTS.md")), true);
+  assert.equal(fs.readFileSync(path.join(nested, "AGENTS.md"), "utf8"), "");
+});
+
+test("aio run with loop count creates distinct run directories", async () => {
   const sandbox = createSandbox();
   await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
-  const countPath = path.join(sandbox, "provider-invocations.txt");
-  writeProvider(
-    sandbox,
-    "custom",
-    `fs.appendFileSync(${JSON.stringify(countPath)}, "x");
-if (prompt.includes("plain text only")) {
-  process.stdout.write("SUMMARY_OUT");
-} else {
-  process.stdout.write("main-out");
-}`,
-  );
+  writeProvider(sandbox, "custom", 'process.stdout.write("x");');
   writeWorkflow(
     sandbox,
     "default",
@@ -1292,19 +1418,15 @@ initial: only
 states:
   only:
     role: analyse
-    summary:
-      enabled: true
-      prompt: "summarize in one word"
     next: done
   done:
     type: final
 `,
   );
-
-  const result = await runWorkflow({ projectRoot: sandbox });
-  assert.equal(fs.readFileSync(countPath, "utf8").length, 2);
-  assert.match(result.outputs[0].stdout, /main-out/);
-  assert.equal(result.outputs[0].summary, "SUMMARY_OUT");
+  await routeCommand(["run", "2"], { projectRoot: sandbox, latestVersion: false });
+  const runsRoot = path.join(sandbox, ".aio", "runs");
+  const dirs = fs.readdirSync(runsRoot).filter((n) => n !== "latest");
+  assert.equal(dirs.length, 2);
 });
 
 test("run writes conversation log and latest pointer", async () => {
