@@ -1,39 +1,17 @@
 name: default
-initial: analyse
+initial: pick
 states:
-  analyse:
-    role: analyse
-    next: plan
-  plan:
-    role: plan
-    next: build
-  build:
-    role: build
-    next: review
-  review:
-    role: review
+  pick:
+    role: pick
+    next: do
+  do:
+    role: do
+    next: eval
+  eval:
+    role: eval
     next:
-      - if: step.status == "not_configured"
-        then: log
-      - if: step.has_changes == true
-        then: fix
       - if: step.exit_code == 0
-        then: commit
-      - then: log
-  fix:
-    role: fix
-    next: review
-  log:
-    role: log
-    next: done
-  commit:
-    role: commit
-    next: publish
-  publish:
-    role: publish
-    next: summarize
-  summarize:
-    role: summarize
-    next: done
+        then: done
+      - then: pick
   done:
     type: final

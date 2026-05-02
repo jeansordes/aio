@@ -1,3 +1,10 @@
+## Unreleased
+
+### BREAKING CHANGE
+
+- **cli:** `aio run` no longer accepts a loop count (`aio run <n>`, second positional, `--loops` / `-n`). Each invocation runs the workflow once; repeats use `next:` in YAML and are capped by `workflow.maxSteps` ([`03.03.01`](specs/02-requirements/03.03.01-limit-workflow-loops.md)).
+- **template:** default scaffold is `pick → do → eval` with handoff in `.aio/runs/<id>/state.json`. Removed roles (`analyse`, `plan`, `build`, `review`, `fix`, `log`, `commit`, `publish`, `summarize`) are documented in [`docs/extending-the-default-workflow.md`](docs/extending-the-default-workflow.md).
+
 ## [0.11.0](https://github.com/jeansordes/aio/compare/v0.10.0...v0.11.0) (2026-04-28)
 
 ### Features
@@ -8,7 +15,7 @@
 
 ### BREAKING CHANGE
 
-* Workflow YAML **`summary`** / **`summary.enabled`** no longer runs a second provider call after a step. Use a normal state (the default template adds `summarize` after `publish`) and optional `run_dir` in the role’s `prompt.include` ([`03.03.05`](specs/02-requirements/03.03.05-per-state-ai-summary.md)).
+* Workflow YAML **`summary`** / **`summary.enabled`** no longer runs a second provider call after a step. Use a normal workflow state and optional `run_dir` in the role’s `prompt.include` ([`03.03.05`](specs/02-requirements/03.03.05-per-state-ai-summary.md)).
 
 ## [0.10.0](https://github.com/jeansordes/aio/compare/v0.7.0...v0.10.0) (2026-04-27)
 

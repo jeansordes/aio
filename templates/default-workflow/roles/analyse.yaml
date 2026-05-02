@@ -1,4 +1,0 @@
-provider: __AIO_DEFAULT_PROVIDER__
-model: default
-instructions: "Analyse the current project state and summarize the work needed."
-contextFiles: []

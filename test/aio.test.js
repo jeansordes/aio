@@ -660,15 +660,9 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
   for (const entry of [
     ".aio/config.yaml",
     ".aio/providers.yaml",
-    ".aio/roles/analyse.yaml",
-    ".aio/roles/plan.yaml",
-    ".aio/roles/build.yaml",
-    ".aio/roles/review.yaml",
-    ".aio/roles/fix.yaml",
-    ".aio/roles/log.yaml",
-    ".aio/roles/commit.yaml",
-    ".aio/roles/publish.yaml",
-    ".aio/roles/summarize.yaml",
+    ".aio/roles/pick.yaml",
+    ".aio/roles/do.yaml",
+    ".aio/roles/eval.yaml",
     ".aio/workflows/default.yaml",
     ".aio/prompts",
     ".aio/schemas",
@@ -681,8 +675,8 @@ test("init creates the expected .aio structure without non-TTY specs scaffolding
   const config = YAML.parse(fs.readFileSync(path.join(sandbox, ".aio", "config.yaml"), "utf8"));
   assert.equal(config.tracking.file, null);
   assert.equal(config.defaults.provider, "cursor");
-  const analyseRole = fs.readFileSync(path.join(sandbox, ".aio", "roles", "analyse.yaml"), "utf8");
-  assert.match(analyseRole, /^provider: cursor\n/m);
+  const pickRole = fs.readFileSync(path.join(sandbox, ".aio", "roles", "pick.yaml"), "utf8");
+  assert.match(pickRole, /^provider: cursor\n/m);
 });
 
 test("init fails when no provider CLI is detected and does not create .aio", async () => {
@@ -930,7 +924,7 @@ tracking:
 initial: only
 states:
   only:
-    role: analyse
+    role: pick
     next: done
   done:
     type: final
@@ -985,10 +979,10 @@ test("aio run executes default.yaml with linear transitions and captured stdout"
 initial: one
 states:
   one:
-    role: analyse
+    role: pick
     next: two
   two:
-    role: plan
+    role: do
     next: done
   done:
     type: final
@@ -1000,7 +994,7 @@ states:
   assert.equal(result.finalState, "done");
   assert.deepEqual(
     result.outputs.map((output) => output.role),
-    ["analyse", "plan"],
+    ["pick", "do"],
   );
   assert.equal(result.outputs[0].status, "ok");
   assert.equal(result.outputs[0].stdout, "plain output");
@@ -1018,7 +1012,7 @@ test("aio run exposes file changes from the latest provider step", async () => {
 initial: only
 states:
   only:
-    role: analyse
+    role: pick
     next: done
   done:
     type: final
@@ -1043,12 +1037,13 @@ test("readProvidersFile loads declarative provider configuration", async () => {
 
 test("generated default workflow is runnable with placeholder providers", async () => {
   const sandbox = createSandbox();
-  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("codex") });
+  await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeProvider(sandbox, "custom", "process.exit(0);");
 
   const result = await runWorkflow({ projectRoot: sandbox });
 
   assert.equal(result.finalState, "done");
-  assert.equal(result.steps.review.status, "not_configured");
+  assert.equal(result.steps.eval.status, "ok");
 });
 
 test("aio run custom-name loads a named workflow", async () => {
@@ -1062,7 +1057,7 @@ test("aio run custom-name loads a named workflow", async () => {
 initial: only
 states:
   only:
-    role: analyse
+    role: pick
     next: done
   done:
     type: final
@@ -1072,12 +1067,16 @@ states:
   const result = await runWorkflow({ projectRoot: sandbox, workflowName: "custom-name" });
 
   assert.equal(result.workflow, "custom-name");
-  assert.match(result.outputs[0].stdout, /Analyse the current project state/);
+  assert.match(result.outputs[0].stdout, /Read the tracking file/);
 });
 
 test("conditional transitions route by step state and capture plain text stdout", async () => {
   const sandbox = createSandbox();
   await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeRole(sandbox, "build", "build step");
+  writeRole(sandbox, "review", "review step");
+  writeRole(sandbox, "fix", "fix step");
+  writeRole(sandbox, "commit", "commit step");
   writeProvider(
     sandbox,
     "custom",
@@ -1121,6 +1120,8 @@ states:
 test("conditional transitions can use git.has_changes in a temp git repo", async () => {
   const sandbox = createSandbox();
   await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
+  writeRole(sandbox, "analyse", "inspect tree");
+  writeRole(sandbox, "log", "log outcome");
   fs.writeFileSync(path.join(sandbox, "changed.txt"), "changed\n");
   require("node:child_process").execFileSync("git", ["init"], { cwd: sandbox, stdio: "ignore" });
   writeProvider(sandbox, "custom", 'process.stdout.write(JSON.stringify({ status: "ok" }));');
@@ -1270,56 +1271,34 @@ tracking:
   );
 });
 
-test("parseRunArgs parses flags, workflow, and loop count", () => {
+test("parseRunArgs parses flags and optional workflow name", () => {
   assert.deepEqual(parseRunArgs(["--quiet", "release"]), {
     quiet: true,
     verbose: false,
     allowEditsOutsideDir: false,
     workflowName: "release",
-    loops: 1,
   });
   assert.deepEqual(parseRunArgs(["-q", "default"]), {
     quiet: true,
     verbose: false,
     allowEditsOutsideDir: false,
     workflowName: "default",
-    loops: 1,
   });
   assert.deepEqual(parseRunArgs(["3"]), {
     quiet: false,
     verbose: false,
     allowEditsOutsideDir: false,
-    workflowName: "default",
-    loops: 3,
+    workflowName: "3",
   });
-  assert.deepEqual(parseRunArgs(["release", "5"]), {
-    quiet: false,
-    verbose: false,
-    allowEditsOutsideDir: false,
-    workflowName: "release",
-    loops: 5,
-  });
-  assert.deepEqual(parseRunArgs(["--loops", "2", "wf"]), {
-    quiet: false,
-    verbose: false,
-    allowEditsOutsideDir: false,
-    workflowName: "wf",
-    loops: 2,
-  });
-  assert.deepEqual(parseRunArgs(["-n", "0"]), {
+  assert.deepEqual(parseRunArgs([]), {
     quiet: false,
     verbose: false,
     allowEditsOutsideDir: false,
     workflowName: "default",
-    loops: 0,
   });
 });
 
-test("parseRunArgs rejects conflicting loop specifications", () => {
-  assert.throws(
-    () => parseRunArgs(["--loops", "3", "5"]),
-    (err) => err instanceof Error && err.message.includes("numeric loop count"),
-  );
+test("parseRunArgs rejects too many positionals", () => {
   assert.throws(
     () => parseRunArgs(["a", "b", "c"]),
     (err) => err instanceof Error && err.message.includes("too many positional"),
@@ -1406,7 +1385,7 @@ test("init writes empty AGENTS.md when nested in another git repository", async 
   assert.equal(fs.readFileSync(path.join(nested, "AGENTS.md"), "utf8"), "");
 });
 
-test("aio run with loop count creates distinct run directories", async () => {
+test("aio run twice creates distinct run directories", async () => {
   const sandbox = createSandbox();
   await setupProject({ projectRoot: sandbox, stdinIsTTY: false, stdoutIsTTY: false, ...withProbe("custom") });
   writeProvider(sandbox, "custom", 'process.stdout.write("x");');
@@ -1417,13 +1396,14 @@ test("aio run with loop count creates distinct run directories", async () => {
 initial: only
 states:
   only:
-    role: analyse
+    role: pick
     next: done
   done:
     type: final
 `,
   );
-  await routeCommand(["run", "2"], { projectRoot: sandbox, latestVersion: false });
+  await routeCommand(["run"], { projectRoot: sandbox, latestVersion: false });
+  await routeCommand(["run"], { projectRoot: sandbox, latestVersion: false });
   const runsRoot = path.join(sandbox, ".aio", "runs");
   const dirs = fs.readdirSync(runsRoot).filter((n) => n !== "latest");
   assert.equal(dirs.length, 2);
@@ -1440,7 +1420,7 @@ test("run writes conversation log and latest pointer", async () => {
 initial: only
 states:
   only:
-    role: analyse
+    role: pick
     next: done
   done:
     type: final
@@ -1472,6 +1452,13 @@ function createPackage(...segments) {
     JSON.stringify({ name: "@jeansordes/aio", version: "0.0.1" }),
   );
   return packageRoot;
+}
+
+function writeRole(projectRoot, name, instructions) {
+  fs.writeFileSync(
+    path.join(projectRoot, ".aio", "roles", `${name}.yaml`),
+    `provider: custom\nmodel: default\ninstructions: ${JSON.stringify(instructions)}\ncontextFiles: []\n`,
+  );
 }
 
 function writeProvider(projectRoot, provider, body) {

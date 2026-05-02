@@ -1,0 +1,12 @@
+provider: __AIO_DEFAULT_PROVIDER__
+model: default
+instructions: >-
+  Read `state.json` in the run directory for the current task and any notes.
+  Implement the task in the working tree. Append a short progress line to
+  the `notes` field in `state.json` (keep prior content).
+contextFiles: []
+prompt:
+  include:
+    - instructions
+    - tracking_file
+    - run_dir

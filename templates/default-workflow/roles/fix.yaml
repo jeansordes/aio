@@ -1,4 +1,0 @@
-provider: __AIO_DEFAULT_PROVIDER__
-model: default
-instructions: "Address review feedback or test failures."
-contextFiles: []

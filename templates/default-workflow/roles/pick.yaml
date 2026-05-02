@@ -1,0 +1,15 @@
+provider: __AIO_DEFAULT_PROVIDER__
+model: default
+instructions: >-
+  Read the tracking file. Choose ONE not-yet-done task. Write or update
+  `state.json` in the run directory (see "Run directory" below) as JSON with
+  keys: `task` (object with `id`, `title`, `source` path), `iteration`
+  (integer, use 1 if absent), `status` set to `"in_progress"`, `notes`
+  (string, may be empty). Preserve prior `notes` unless you intend to reset
+  them for a new task. Do not change source code or the tracking file.
+contextFiles: []
+prompt:
+  include:
+    - instructions
+    - tracking_file
+    - run_dir

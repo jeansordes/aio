@@ -1,0 +1,17 @@
+provider: __AIO_DEFAULT_PROVIDER__
+model: default
+instructions: >-
+  Read `state.json` in the run directory and inspect the working tree against
+  the task. Decide if the task is done. Update `state.json`: increment
+  `iteration`; set `status` to `"complete"` or `"continue"`; if continuing,
+  write a concrete improvement note in `notes` for the next pick/do cycle.
+  Preserve the `task` object. Exit with code 0 only when the task is
+  complete; otherwise exit with a non-zero code so the workflow loops.
+  Change only `state.json` in the run directory, not application source
+  unless needed to fix `state.json` formatting.
+contextFiles: []
+prompt:
+  include:
+    - instructions
+    - tracking_file
+    - run_dir

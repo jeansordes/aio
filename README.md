@@ -46,6 +46,32 @@ them.
 
 ## Example workflow
 
+The **default** workflow after `init` is a small loop:
+
+```yaml
+name: default
+initial: pick
+states:
+  pick:
+    role: pick
+    next: do
+  do:
+    role: do
+    next: eval
+  eval:
+    role: eval
+    next:
+      - if: step.exit_code == 0
+        then: done
+      - then: pick
+  done:
+    type: final
+```
+
+Each `aio run` loads this graph **once**. Branching and repeats come from
+`next:` transitions (see `eval` above). A hard cap on how many states run in a
+single invocation is `workflow.maxSteps` in `.aio/config.yaml`.
+
 The [`templates/roadmap-step/`](templates/roadmap-step/) template defines a
 small state machine: pick a roadmap row, implement, test, optionally fix, commit,
 then finish. The workflow file looks like this:
@@ -130,15 +156,9 @@ After `init`, a typical tree looks like this:
   config.yaml
   providers.yaml
   roles/
-    analyse.yaml
-    plan.yaml
-    build.yaml
-    review.yaml
-    fix.yaml
-    log.yaml
-    commit.yaml
-    publish.yaml
-    summarize.yaml
+    pick.yaml
+    do.yaml
+    eval.yaml
   workflows/
     default.yaml
   prompts/
@@ -147,15 +167,17 @@ After `init`, a typical tree looks like this:
 
 Default **roles** (each is instructions plus provider context for one step):
 
-- **analyse:** summarize the repo and what work is needed.
-- **plan:** turn that into a concise implementation plan.
-- **build:** apply the planned change in the working tree.
-- **review:** review the result; edit only if something must be fixed.
-- **fix:** address review findings.
-- **log:** record outcome when review does not lead to commit.
-- **commit:** create a commit when the tree is ready.
-- **publish:** follow your release or publish steps.
-- **summarize:** write a short summary from the latest run log under `.aio/runs/`.
+- **pick:** read `tracking.file` (see below), choose one task, and write the
+  choice into `state.json` under the current run directory.
+- **do:** read `state.json` and implement that task in the working tree.
+- **eval:** re-read the task and working tree; exit `0` when done (workflow
+  finishes), or non-zero to loop back to **pick** with notes in `state.json` for
+  the next iteration.
+
+More elaborate role sets (analyse, plan, commit, publish, and so on) are
+documented in [`docs/extending-the-default-workflow.md`](docs/extending-the-default-workflow.md).
+That guide is for the repository; `aio init` does not copy `docs/` into your
+project.
 
 `setup` (same as `init`) never overwrites existing files.
 
@@ -180,10 +202,11 @@ into a gitignored `.aio/.env`; the template ships `.gitignore` rules under
 - **`aio init`**, **`aio setup`:** create or refresh `.aio/`; existing files are
   not overwritten (`setup` is a synonym for `init`).
 - **`aio run`:** run `.aio/workflows/default.yaml`. **`aio run <workflow>`:**
-  run `.aio/workflows/<workflow>.yaml`. Supports loop counts, `--quiet` /
-  `--verbose`, and **`--allow-edits-outside-dir`** to disable project-directory
-  isolation for the Cursor provider (a warning is printed). Each run writes
-  logs under `.aio/runs/<id>/`; the latest id is stored in `.aio/runs/latest`.
+  run `.aio/workflows/<workflow>.yaml` **once** (one run id under `.aio/runs/`).
+  To repeat states, encode `next:` branches in the workflow. Use **`--quiet`** /
+  **`--verbose`**, and **`--allow-edits-outside-dir`** to disable project-directory
+  isolation for the Cursor provider (a warning is printed). Logs live under
+  `.aio/runs/<id>/`; the latest id is stored in `.aio/runs/latest`.
 - **`aio observe`:** follow the conversation log for the latest run (like
   `tail -f`). Use **`--events`** for `events.jsonl`, **`--run <id>`** for a
   specific run directory.

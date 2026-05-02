@@ -1,4 +1,0 @@
-provider: __AIO_DEFAULT_PROVIDER__
-model: default
-instructions: "Record a concise summary of the current workflow result."
-contextFiles: []

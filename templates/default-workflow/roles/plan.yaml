@@ -1,4 +1,0 @@
-provider: __AIO_DEFAULT_PROVIDER__
-model: default
-instructions: "Create a concise implementation plan from the analysis."
-contextFiles: []

@@ -1,4 +1,0 @@
-provider: __AIO_DEFAULT_PROVIDER__
-model: default
-instructions: "Publish or hand off the completed change as configured by the project."
-contextFiles: []
