@@ -4,8 +4,8 @@
 [![Node](https://img.shields.io/node/v/@jeansordes/aio.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Project-local AI orchestration. Declarative YAML workflows wired to the CLI you
-already use.
+Project-local AI orchestration. Run an interactive goal or a declarative YAML
+workflow with the AI CLI you already use.
 
 ## What is aio?
 
@@ -29,7 +29,26 @@ roadmap rows), so handoffs stay inspectable and versionable.
   stays where you put it; init can record a tracking file and pass it into
   provider prompts.
 
-## Quick start
+## Interactive goal mode
+
+Run `aio` (or `npx @jeansordes/aio`) in a terminal from your project directory.
+Pick a harness if more than one is available, enter the goal, and enter one
+success criterion per line. aio starts a fresh harness turn each time and
+shows its output. It stops when the harness reports evidence for every criterion,
+or pauses when it needs your input or reaches ten turns.
+
+- Type `p` then Enter to pause after the current turn.
+- When paused, press Enter to resume, or enter guidance to send to the next turn.
+- Type `q` then Enter or press Ctrl+C to quit. This stops the harness. Reopen
+  `aio` in the same directory to resume from the last saved checkpoint.
+
+Cursor Agent and Codex work without `aio init`. To use another headless CLI,
+add a provider to `.aio/providers.yaml` with a command and arguments containing
+`{{prompt}}`, or set `promptInput: stdin` and pass the harness's stdin flag
+if it needs one. aio starts it in the current project directory. Checkpoints
+stay local under `.aio/sessions/goal/`.
+
+## Quick start for YAML workflows
 
 Set `CURSOR_API_KEY` as described in the Cursor docs, then:
 

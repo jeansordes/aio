@@ -473,9 +473,9 @@ test("main does not emit passive update when AIO_DEV is set", async () => {
   assert.equal(noted.length, 0);
 });
 
-test("routeCommand prints man-style help for bare aio, help, -h, and --help", async () => {
-  const opts = { latestVersion: false };
-  const noArgs = (await routeCommand([], opts)).message;
+test("non-interactive bare aio prints the same man-style help as explicit help flags", async () => {
+  const opts = { stdinIsTTY: true, stdoutIsTTY: true };
+  const noArgs = (await routeCommand([], { ...opts, stdoutIsTTY: false })).message;
   const help = (await routeCommand(["help"], opts)).message;
   const h = (await routeCommand(["-h"], opts)).message;
   const longHelp = (await routeCommand(["--help"], opts)).message;

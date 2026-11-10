@@ -7,5 +7,5 @@ run from many places.
 
 User should not need complex install flow.
 
-The CLI entrypoint must explain itself: equivalent help for bare invocations
-and for `aio help` / standard `-h` / `--help` flags.
+The CLI entrypoint must explain itself: bare invocations in a terminal open
+goal mode. Non-interactive bare invocations and explicit help flags show help.

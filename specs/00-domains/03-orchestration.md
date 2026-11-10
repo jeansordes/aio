@@ -1,6 +1,6 @@
 # Orchestration
 
-App coordinates AI tools through local workflow config.
+App coordinates AI tools through local workflow config or a foreground goal session.
 
 Goal:
 run repeatable agent workflows from one CLI.
