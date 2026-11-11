@@ -12,27 +12,27 @@ const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const [name, arg] = process.argv.slice(2);
 const prompt = arg ?? fs.readFileSync(0, "utf8");
-const report = JSON.parse(prompt.match(/write a JSON report at (".*") \(relative/)[1]);
+const report = JSON.parse(prompt.match(/report to (".*") \(relative/)[1]);
 function write(value) { fs.writeFileSync(report, JSON.stringify(value)); }
 if (name === "no-evidence") {
   write({ decision: "done", summary: "Claims success with no evidence.", evidence: [] });
 } else if (name === "codex") {
-  if (!prompt.includes('User guidance: ["Use the local fixture"]')) {
+  if (!prompt.includes("Use the local fixture")) {
     write({ decision: "blocked", summary: "Checked the inputs.", request: "Which fixture?" });
   } else {
     write({ decision: "done", summary: "Checked the local fixture.", evidence: ["fixture check passed"] });
   }
-} else if (!prompt.includes("Last saved checkpoint: First checkpoint.")) {
+} else if (!prompt.includes("Checkpoint for this visit: First checkpoint.")) {
   console.log("First turn running");
   setTimeout(() => write({ decision: "continue", summary: "First checkpoint." }), 500);
-} else if (!prompt.includes("User guidance: [\"Finish now\"]")) {
+} else if (!prompt.includes("Finish now")) {
   // Inherit the pipes so aio cannot finish quitting unless it stops this tool too.
   spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });
   write({ decision: "done", summary: "Uncommitted report", evidence: ["premature evidence"] });
   console.log("Harness and tool are running");
   setInterval(() => {}, 1000);
 } else {
-  if (!prompt.includes("prior attempt was interrupted")) process.exit(2);
+  if (!prompt.includes("prior invocation was interrupted")) process.exit(2);
   write({ decision: "done", summary: "Resumed the goal.", evidence: ["saved checkpoint reused"] });
 }
 `;
@@ -45,13 +45,13 @@ function project(t) {
 }
 
 function readState(root) {
-  return JSON.parse(fs.readFileSync(path.join(root, ".aio/sessions/goal/session.json"), "utf8"));
+  return JSON.parse(fs.readFileSync(path.join(root, ".aio/sessions/current/session.json"), "utf8"));
 }
 
-function open(t, root, { pathEnv = "", maxTurns } = {}) {
+function open(t, root, { pathEnv = "" } = {}) {
   const child = spawn(process.execPath, ["-e",
-    `require(${JSON.stringify(cli)}).routeCommand([], { stdinIsTTY: true, stdoutIsTTY: true, goalMaxTurns: ${maxTurns} }).catch(e => { console.error(e); process.exitCode = 1; })`,
-  ], { cwd: root, env: { ...process.env, PATH: pathEnv } });
+    `require(${JSON.stringify(cli)}).routeCommand([], { stdinIsTTY: true, stdoutIsTTY: true,  }).catch(e => { console.error(e); process.exitCode = 1; })`,
+  ], { cwd: root, env: { ...process.env, PATH: pathEnv, XDG_CONFIG_HOME: path.join(root, "global") } });
   t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill(); });
   let output = "";
   let cursor = 0;
@@ -76,6 +76,9 @@ function open(t, root, { pathEnv = "", maxTurns } = {}) {
 }
 
 async function enterGoal(app) {
+  await app.see("Start a session");
+  await app.see("Choose [1]");
+  app.type("1");
   await app.see("What goal should aio work toward?");
   app.type("Verify the fixture");
   await app.see("Criterion 1:");
@@ -91,9 +94,12 @@ test("bare aio runs a built-in harness without init and resumes from a blocker w
   fs.writeFileSync(path.join(root, "codex"),
     `#!${process.execPath}\nprocess.argv.splice(2, Infinity, "codex");\n${fixture}`, { mode: 0o700 });
   const app = open(t, root, { pathEnv: root });
+  await app.see("Default harness");
+  await app.see("Choose [1]");
+  app.type("1");
   await enterGoal(app);
   await app.see("Your input is needed: Which fixture?");
-  assert.equal(readState(root).turns, 1);
+  assert.equal(readState(root).history.length, 1);
   await app.see("Press Enter to resume");
   app.type("Use the local fixture");
   await app.see("The fixture check passes: fixture check passed");
@@ -106,69 +112,81 @@ test("custom harness pauses after a turn, quits with Ctrl+C, and resumes from th
   skip: process.platform === "win32", timeout: 15000,
 }, async (t) => {
   const root = project(t);
-  fs.mkdirSync(path.join(root, ".aio"));
-  fs.writeFileSync(path.join(root, ".aio/providers.yaml"), YAML.stringify({ providers: {
-    fixture: { command: process.execPath, args: ["harness.cjs", "custom", "{{prompt}}"] },
+  fs.mkdirSync(path.join(root, "global/aio"), { recursive: true });
+  fs.writeFileSync(path.join(root, "global/aio/config.yaml"), YAML.stringify({ defaultHarness: "fixture", harnesses: {
+    fixture: { command: process.execPath, args: [path.join(root, "harness.cjs"), "custom", "{{prompt}}"] },
   } }));
   const app = open(t, root);
   await enterGoal(app);
   await app.see("First turn running");
   app.type("p");
   await app.see("Paused at your request.");
-  assert.equal(readState(root).turns, 1);
+  assert.equal(readState(root).history.length, 1);
   await app.see("Press Enter to resume");
   app.type("");
   await app.see("Harness and tool are running");
   app.interrupt();
-  await app.see("The last turn was interrupted");
+  await app.see("The last invocation was interrupted");
   await app.exit();
   const state = readState(root);
   assert.equal(state.status, "paused");
-  assert.equal(state.turns, 1);
+  assert.equal(state.history.length, 1);
   assert.equal(state.summary, "First checkpoint.");
   assert.equal(state.interrupted, true);
 
   const resumed = open(t, root);
-  await resumed.see("Saved goal: Verify the fixture");
-  await resumed.see("last turn was interrupted");
-  await resumed.see("[R]esume");
-  resumed.type("r");
+  await resumed.see("Saved session: Goal");
+  await resumed.see("last invocation was interrupted");
+  await resumed.see("Choose [1]");
+  resumed.type("1");
   await resumed.see("Add guidance");
   resumed.type("Finish now");
   await resumed.see("saved checkpoint reused");
   await resumed.exit();
   assert.equal(readState(root).status, "done");
-  assert.equal(readState(root).turns, 2);
-});
-
-test("the turn cap pauses the loop and persists the last completed turn", { timeout: 10000 }, async (t) => {
-  const root = project(t);
-  fs.mkdirSync(path.join(root, ".aio"));
-  fs.writeFileSync(path.join(root, ".aio/providers.yaml"), YAML.stringify({ providers: {
-    fixture: { command: process.execPath, args: ["harness.cjs", "custom", "{{prompt}}"] },
-  } }));
-  const app = open(t, root, { maxTurns: 1 });
-  await enterGoal(app);
-  await app.see("Paused after 1 turn.");
-  await app.see("Press Enter to resume");
-  app.type("q");
-  await app.exit();
-  assert.equal(readState(root).status, "paused");
-  assert.equal(readState(root).turns, 1);
+  assert.equal(readState(root).history.length, 2);
 });
 
 test("a successful harness exit cannot complete a goal without evidence", { timeout: 10000 }, async (t) => {
   const root = project(t);
-  fs.mkdirSync(path.join(root, ".aio"));
-  fs.writeFileSync(path.join(root, ".aio/providers.yaml"), YAML.stringify({ providers: {
-    fixture: { command: process.execPath, args: ["harness.cjs", "no-evidence", "{{prompt}}"] },
+  fs.mkdirSync(path.join(root, "global/aio"), { recursive: true });
+  fs.writeFileSync(path.join(root, "global/aio/config.yaml"), YAML.stringify({ defaultHarness: "fixture", harnesses: {
+    fixture: { command: process.execPath, args: [path.join(root, "harness.cjs"), "no-evidence", "{{prompt}}"] },
   } }));
   const app = open(t, root);
   await enterGoal(app);
-  await app.see("The harness report has no valid decision, evidence, or request.");
+  await app.see("Completion requires evidence for every criterion.");
   await app.see("Press Enter to resume");
   app.type("q");
   await app.exit();
   assert.equal(readState(root).status, "paused");
-  assert.equal(readState(root).turns, 0);
+  assert.equal(readState(root).history.length, 0);
+});
+
+test("the interactive menu loads a project workflow and preserves its snapshot", { timeout: 10000 }, async (t) => {
+  const root = project(t);
+  fs.mkdirSync(path.join(root, "global/aio"), { recursive: true });
+  fs.writeFileSync(path.join(root, "global/aio/config.yaml"), YAML.stringify({
+    defaultHarness: "fixture", harnesses: {
+      fixture: { command: process.execPath, args: [path.join(root, "harness.cjs"), "custom", "{{prompt}}"] },
+    },
+  }));
+  fs.mkdirSync(path.join(root, ".aio/workflows"), { recursive: true });
+  const workflow = {
+    name: "Chosen workflow", initial: "build", nodes: {
+      build: { type: "goal", objective: "Build it", criteria: ["Works"], maxTurns: 1, next: "end" },
+      end: { type: "end" },
+    },
+  };
+  fs.writeFileSync(path.join(root, ".aio/workflows/build.yaml"), YAML.stringify(workflow));
+  const app = open(t, root);
+  await app.see("Workflow — build.yaml");
+  await app.see("Choose [1]");
+  app.type("2");
+  await app.see("Goal turn limit reached.");
+  await app.see("Press Enter to resume");
+  app.type("q");
+  await app.exit();
+  assert.deepEqual(readState(root).workflow, workflow);
+  assert.equal(readState(root).current, "build");
 });
