@@ -1,129 +1,179 @@
 # @jeansordes/aio
 
-An interactive terminal for Goals and agent-routed workflows.
-
-Run `aio` in your project directory. Choose a standalone Goal, select a YAML
-workflow, or resume saved work. The terminal shows an ASCII graph, the active
-node and recent agent output.
+A keyboard-driven terminal for agent workflows, independent validation and scripts.
 
 ## Start
 
-Install an authenticated Cursor Agent CLI or Codex CLI, then run:
+Install and authenticate a Cursor Agent CLI or Codex CLI, then run in your project:
 
 ```bash
 npx @jeansordes/aio
+# or: bunx @jeansordes/aio
+# or: npm install -g @jeansordes/aio && aio
 ```
 
-You can also use `bunx @jeansordes/aio`, or install globally:
+The menu puts **Workflow** and **Goal** first, followed by Resume (when available),
+Settings, Version, Help, Update and Quit. Use arrows and Enter, or Esc to return.
+A script-only workflow does not require an agent CLI or model profile.
 
-```bash
-npm install -g @jeansordes/aio
-aio
-```
+**Goal** asks for an objective and success criteria. Add, edit or delete criteria,
+then choose **Finish criteria**. At least one criterion is required. Text entry
+accepts literal `q`; quitting is a menu or execution command only. Goal builds an
+action → validation → end workflow, with a correction loop back to the action.
+The validator runs independently and must provide evidence for every criterion.
 
-On first use, choose the default harness. For a standalone Goal, enter an
-objective and one success criterion per line, then an empty line.
+The first agent setup offers `low`, `mid` and `high` model profiles. Enter actual
+model identifiers accepted by your chosen CLI; aio does not infer identifiers from
+family names such as Luna/Sol/Astra or Haiku/Sonnet/Opus. Actions default to `mid`,
+routing to `low`. Settings supports profile creation, renaming, deletion, editing
+and reordering. Before **Launch**, inspect the node list and optionally change each
+agent node's profile for this session.
 
-- `p` then Enter pauses after the current invocation.
-- At a pause, press Enter to resume, or enter guidance for the agent.
-- `q` then Enter or Ctrl+C stops the harness and its tools.
-- Reopen `aio` in the same directory to resume the saved checkpoint.
+During execution:
+
+- Arrows inspect numbered nodes independently of the currently running node.
+- The animated marker identifies execution; `>[n]<` identifies inspection.
+- `f` returns inspection to the active node; PgUp/PgDn scroll its details and output.
+- `p` pauses after the current invocation. Pauses offer guidance and resume.
+- `q`, Ctrl+C or terminal closure stop the running process and its tools.
 
 Execution runs only while aio is open. One session can execute per project.
-After an interruption, project files may include changes from the unfinished
-invocation even though its result has not been accepted.
+The view adapts to terminal size; full events and output remain in session logs.
 
-## Workflows
+## Version 2 workflows
 
-Put YAML files in `.aio/workflows/` to make them available in the menu.
-The package includes [an implementation/review example](examples/review.yaml).
-
-A workflow defines `name`, `initial`, `nodes` and an optional `maxInvocations`.
-Objectives belong to Goal nodes, not to the workflow.
+Put YAML files in `.aio/workflows/`. The package includes
+[an implementation and validation workflow](examples/review.yaml) and
+[a script action and routing workflow](examples/scripts.yaml).
 
 ```yaml
+version: 2
 name: implement-and-check
 initial: implement
+maxInvocations: 100
 nodes:
   implement:
-    type: goal
-    objective: Implement the behavior described in TASK.md.
-    criteria:
-      - The behavior is implemented and relevant tests pass.
-    next: decide
-
-  decide:
+    type: action
+    prompt: Implement TASK.md and address any prior validation findings.
+    modelProfile: mid
+    next: validate
+  validate:
     type: route
-    instructions: Inspect the implementation and its test evidence.
+    prompt: Independently inspect the implementation and relevant test results.
+    modelProfile: low
+    criteria:
+      - The behavior described in TASK.md is implemented and relevant tests pass.
     routes:
       - to: implement
         description: Corrections are needed.
       - to: complete
-        description: The implementation satisfies the requested behavior.
-
+        description: Every criterion is satisfied with evidence.
   complete:
     type: end
 ```
 
-A **Goal** owns `objective`, nonempty `criteria`, and `next`. It can also
-define `instructions` and `maxTurns`. The agent works in fresh invocations
-until it reports success with evidence for every criterion. Incomplete work
-continues in the same node. When it needs your intervention, aio pauses and
-shows its request.
+Each node may have a display `name`. Node order determines display numbers;
+references in YAML continue to use stable node IDs.
 
-A **Route** owns `instructions` and a list of `routes`, each with `to` and
-`description`. Its agent chooses an allowed destination and gives a reason.
-It may inspect files; its instructions prohibit performing the Goals' work.
-This is an instruction boundary, not a universal read-only sandbox.
+An **action** has a `prompt`, `modelProfile` and `next`. It performs one invocation,
+then reports `done` with a summary, or `blocked` with a summary and user request.
+It does not assess its own success criteria. Prior routing findings are included
+in subsequent action prompts.
 
-An **End** node completes execution without invoking an agent.
+A **route** has a `prompt`, `modelProfile`, and authorized `routes` with `to` and
+`description`. It reports a destination and justification, or asks the user for
+help. Optional `criteria` require one `{status, evidence}` entry per criterion:
+`satisfied`, `not_satisfied`, or `indeterminate`. Only all-satisfied results may
+route directly to an end. Indeterminate results require a blocked report with a
+user request. The prompt prohibits editing project work; this is an instruction
+boundary, not a universal read-only OS sandbox.
 
-Agent nodes may set `harness` and `model`. A Goal revisited through a cycle
-starts a fresh visit with the previous results available. The standalone Goal
-uses this same runtime with a Goal node followed by an End.
+An **end** completes execution without launching a process.
 
-By default, aio pauses after ten invocations of the current Goal or one hundred
-invocations across the workflow. Set `maxTurns` on a Goal or `maxInvocations`
-on the workflow to change these limits. Resuming explicitly resets these
-execution-window limits. A limit prompts you to review progress; it does not
-declare the task blocked or complete.
-
-## Global harness settings
-
-Settings live in `$XDG_CONFIG_HOME/aio/config.yaml`, or
-`~/.config/aio/config.yaml` when the variable is unset or relative.
-Cursor and Codex have built-in adapters. Authentication is handled by their CLIs.
+A **script** declares `command`, `args` and exactly one of `next` or `routes`.
+It runs from the project directory, with the environment inherited from aio and
+no implicit shell. Use `node`, `python3`, or another interpreter explicitly.
 
 ```yaml
-defaultHarness: codex
-# defaultModel: your-model
+type: script
+command: node
+args: [scripts/check.js]
+timeoutMs: 600000
+routes:
+  - to: implement
+    description: Corrections are required.
+  - to: complete
+    description: The checks pass.
+```
 
+For a fixed `next`, exit code 0 advances and stdout/stderr are logs. A routing script
+must exit 0 and print a single JSON object such as
+`{"to":"complete","summary":"All checks passed"}` to stdout; put diagnostic logs
+on stderr. Unexpected exits, invalid destinations, invalid/oversized JSON (64 KiB)
+and timeouts pause for the user. Scripts never trigger model fallback. The timeout
+defaults to ten minutes and is configurable with `timeoutMs`.
+
+Every launched agent or script counts against `maxInvocations` (default 100),
+including failed fallback attempts. At the limit aio pauses. Explicit resume
+starts a fresh execution window. Cycles must have an eventual path to an end.
+
+## Global CLI configuration and model profiles
+
+Harness definitions and notifications live in `$XDG_CONFIG_HOME/aio/config.yaml`,
+or `~/.config/aio/config.yaml` when the variable is unset or relative. Cursor and
+Codex are built in; their CLIs own authentication. Custom harnesses are supported:
+
+```yaml
 harnesses:
   custom:
     command: /absolute/path/to/your-cli
-    args:
-      - "--print"
-      - "{{model_args}}"
-      - "{{prompt}}"
-    modelArgs:
-      - "--model"
-      - "{{model}}"
+    args: ["--print", "{{model_args}}", "{{prompt}}"]
+    modelArgs: ["--model", "{{model}}"]
 ```
 
-A custom harness must run headlessly in the project directory and be able to
-write the requested JSON report file. Use the CLI's actual supported arguments.
-For a harness that reads the prompt from stdin, set `promptInput: stdin` and
-supply any stdin flag that CLI requires in `args`.
+Custom CLIs must run headlessly and write the requested report file. Use their
+actual arguments. For stdin prompts, set `promptInput: stdin` and add the CLI's
+required stdin flag to `args`. Templates are `{{prompt}}`, `{{project_root}}`,
+`{{model}}` and the standalone `{{model_args}}` expansion. Optional
+`successExitCodes` defaults to `[0]`. Relative executable paths resolve from the
+global configuration directory.
 
-Argument templates support `{{prompt}}`, `{{project_root}}` and `{{model}}`.
-The standalone `{{model_args}}` entry expands the configured model arguments
-when a model is selected. Optional `successExitCodes` defaults to `[0]`.
-Relative command paths resolve from the global config directory.
+`model-profiles.yaml` lives in that same global directory. Each name maps directly
+to an ordered list of explicit harness/model pairs. These identifiers are examples
+to replace with ones accepted by your CLIs:
 
-Node harness choices override the global default. Model precedence is:
-node `model`, the selected harness's `model`, then global `defaultModel`.
-Missing or unavailable harnesses pause execution rather than substituting
-another agent. Every project uses this global configuration.
+```yaml
+profiles:
+  low:
+    - harness: codex
+      model: your-lightweight-model-id
+  mid:
+    - harness: codex
+      model: your-primary-model-id
+    - harness: cursor
+      model: your-fallback-model-id
+  high:
+    - harness: codex
+      model: your-advanced-model-id
+```
+
+The first entry has priority. Missing executables are skipped. Recognized
+model-unavailable, exhausted-quota or rate-limit failures try the next entry;
+unknown errors or invalid agent reports pause. Failure classification uses process
+failure diagnostics, not model prose claiming a quota problem. A CLI that hides
+its failure reason may require manual intervention. No universal quota lookup or
+automatic model discovery is assumed.
+
+Unavailable pairs are excluded for the current execution window and reconsidered
+on explicit resume. A fallback stops the old process group, retains partial edits,
+and instructs the next agent to inspect the actual project before continuing.
+Selection and fallback events record profile, entry number, harness, requested
+model and reason. Requested models are never presented as confirmed actual models.
+When every entry is unavailable, aio pauses.
+
+Workflow nodes use `modelProfile` only. Settings renames do not rewrite project
+workflows; update their references separately. Session profile changes made before
+launch do not edit the source YAML.
 
 ## Notifications
 
@@ -164,21 +214,28 @@ Delivery errors are displayed and recorded without stopping the workflow.
 Requests have bounded timeouts and are not retried automatically. Acceptance
 by the service does not establish that a notification reached your device.
 
-## Persistence and evidence
+## Persistence and compatibility
 
-The current workflow snapshot, defaults, node position, guidance and full
-result history live in `.aio/sessions/current/session.json`. The directory
-also contains `events.jsonl` and `conversation.log`; sessions are ignored by Git.
-Resume uses the saved workflow even if the source YAML has changed.
+`.aio/sessions/current/session.json` contains the version 2 workflow, referenced
+profiles, concrete CLI definitions, position, guidance and result history.
+`events.jsonl` and `conversation.log` preserve full execution logs. Session data
+is ignored by Git. Resume uses its snapshot even if workflow or profile files change.
 
-A successful process exit alone does not establish completion. aio accepts
-only a valid report for the current invocation and displays the evidence
-reported by the agent. It does not independently prove qualitative criteria.
+Accepted results and transitions are saved atomically. Interrupted attempts may
+have changed files even though no result was accepted. Starting a new session
+archives the previous directory under `.aio/sessions/archive-*`; it does not delete
+its results or logs. A stale lock after a forced kill requires checking that the old
+aio and agent processes stopped before removing `.aio/sessions/lock`.
 
-Each accepted result and next position are saved atomically. New sessions
-replace the current session and its logs. After a forced process kill, check
-that the old aio and harness processes have stopped before removing a stale
-`.aio/sessions/lock`.
+This is a breaking format change. Legacy goal nodes, old sessions, `defaultHarness`,
+`defaultModel` and per-node concrete harness/model overrides are unsupported. Create
+new version 2 definitions and configure profiles; remove obsolete global defaults
+from `config.yaml`. Old sessions are reported in the menu and archived on the next
+launch. No automatic conversion or legacy execution engine is provided.
+
+Criterion evidence is reported by the independent routing agent. Aio validates its
+report structure and completion gate; it does not independently prove qualitative
+claims. For deterministic checks, use scripts.
 
 ## Commands and development
 

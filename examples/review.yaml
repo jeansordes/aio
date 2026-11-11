@@ -1,25 +1,24 @@
-name: implementation-and-review
+version: 2
+name: implementation-and-validation
 initial: implement
 nodes:
   implement:
-    type: goal
-    objective: Implement the change described in TASK.md.
-    criteria:
-      - The requested behavior is implemented and relevant tests pass.
-    next: review
-  review:
-    type: goal
-    objective: Review the current implementation.
-    criteria:
-      - REVIEW.md describes actionable problems or justifies their absence.
-    next: decide
-  decide:
+    type: action
+    name: Implementation
+    prompt: Implement TASK.md. Address any corrections from the validation node.
+    modelProfile: mid
+    next: validate
+  validate:
     type: route
-    instructions: Inspect REVIEW.md and the node results to choose the next step.
+    name: Independent validation
+    prompt: Inspect the current project and test results independently. Give specific corrections for unmet criteria. Ask the user for essential missing information.
+    modelProfile: low
+    criteria:
+      - The behavior described in TASK.md is implemented and relevant tests pass.
     routes:
       - to: implement
-        description: The review identifies problems requiring changes.
+        description: At least one criterion needs corrections.
       - to: complete
-        description: The implementation satisfies the review.
+        description: All criteria are satisfied with evidence.
   complete:
     type: end

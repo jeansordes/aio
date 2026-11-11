@@ -6,7 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { attachNotifications, validateNotifications } = require("../lib/notifications");
-const { loadHarnesses, saveDefault } = require("../lib/harnesses");
+const { loadHarnesses, saveConfig } = require("../lib/harnesses");
 
 async function server(t, handler) {
   const instance = http.createServer(handler);
@@ -99,14 +99,14 @@ test("Pushover requires application-level acceptance and missing environment sec
   assert.doesNotMatch(JSON.stringify(events), /private response|token|MISSING_URL/);
 });
 
-test("notification configuration persists with the global harness choice and rejects invalid fields", (t) => {
+test("notification configuration persists with the global CLI configuration and rejects invalid fields", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aio-notify-"));
   t.after(() => fs.rmSync(dir, { force: true, recursive: true }));
   const env = { XDG_CONFIG_HOME: dir };
   const loaded = loadHarnesses(env);
   loaded.config.notifications = { events: ["started", "resumed", "completed"],
     targets: [{ name: "phone", type: "ntfy", url: "https://ntfy.sh/example" }] };
-  saveDefault(loaded, "codex");
+  saveConfig(loaded);
   assert.deepEqual(loadHarnesses(env).config.notifications, loaded.config.notifications);
   assert.throws(() => validateNotifications({ targets: [], events: ["stdout"] }), /invalid events/);
   assert.throws(() => validateNotifications({ targets: [], timeoutMs: 0 }), /timeoutMs/);

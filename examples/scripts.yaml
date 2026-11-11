@@ -1,0 +1,26 @@
+version: 2
+name: script-action-and-routing
+initial: prepare
+nodes:
+  prepare:
+    type: script
+    name: Prepare a demonstration file
+    command: node
+    args:
+      - -e
+      - "require('node:fs').writeFileSync('.aio/script-demo.txt', 'koala')"
+    next: inspect
+  inspect:
+    type: script
+    name: Check the demonstration file
+    command: node
+    args:
+      - -e
+      - "const fs = require('node:fs'); const ok = fs.readFileSync('.aio/script-demo.txt', 'utf8') === 'koala'; console.log(JSON.stringify({to: ok ? 'complete' : 'prepare', summary: ok ? 'File contains koala.' : 'File needs correction.'}))"
+    routes:
+      - to: prepare
+        description: The file needs correction.
+      - to: complete
+        description: The file contains koala.
+  complete:
+    type: end

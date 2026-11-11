@@ -36,3 +36,8 @@ test('scripts choose exactly one fixed or routed successor', () => {
   graph.nodes.action.timeoutMs = -1;
   assert.throws(() => validateWorkflow(graph), /timeout/);
 });
+test('packaged workflow examples use the current schema', () => {
+  const { readWorkflow } = require('../lib/graph');
+  const path = require('node:path');
+  for (const file of ['review.yaml', 'scripts.yaml']) assert.equal(readWorkflow(path.join(__dirname, '../examples', file)).version, 2);
+});

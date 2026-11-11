@@ -3,9 +3,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { configPath, loadHarnesses, saveDefault, resolveHarness, harnessArgs } = require("../lib/harnesses");
+const { configPath, loadHarnesses, saveConfig, resolveHarness, harnessArgs } = require("../lib/harnesses");
 
-test("global harness settings are reused with node overrides and literal prompt arguments", (t) => {
+test("global CLI definitions resolve explicit profile entries with literal prompt arguments", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aio-config-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const env = { HOME: dir, XDG_CONFIG_HOME: path.join(dir, "settings") };
@@ -14,14 +14,14 @@ test("global harness settings are reused with node overrides and literal prompt 
     fixture: { command: process.execPath, args: ["{{model_args}}", "{{prompt}}"],
       modelArgs: ["--model", "{{model}}"] },
   };
-  saveDefault(loaded, "fixture");
+  saveConfig(loaded);
   const again = loadHarnesses(env);
-  assert.equal(again.config.defaultHarness, "fixture");
-  const selected = resolveHarness({ model: "node-model" }, { harness: "fixture", model: "global-model" }, again, env);
+  assert.ok(again.harnesses.fixture);
+  const selected = resolveHarness({ harness: "fixture", model: "node-model" }, again, env);
   assert.deepEqual(harnessArgs(selected, { prompt: "$& {{model}}", projectRoot: "/project" }),
     ["--model", "node-model", "$& {{model}}"]);
   assert.equal(configPath({ HOME: dir, XDG_CONFIG_HOME: "relative" }), path.join(dir, ".config/aio/config.yaml"));
-  assert.equal(loadHarnesses({ HOME: dir }).config.defaultHarness, undefined);
+  assert.deepEqual(loadHarnesses({ HOME: dir }).config, {});
 });
 
 test("bad global configuration fails rather than falling back to an arbitrary harness", (t) => {
