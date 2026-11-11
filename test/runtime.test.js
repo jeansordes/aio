@@ -30,6 +30,7 @@ function fixture(t, workflow = standaloneGoal('Build', ['Works'])) {
       fs.writeFileSync('partial.txt','preserve me'); console.error('quota exhausted'); process.exit(1);
     }
     if (process.env.MODE === 'unknown') {console.error('permission denied');process.exit(1);}
+    if (process.env.MODE === 'zero-quota' && process.argv[2] === 'first') {console.log(JSON.stringify({type:'turn.failed',error:{message:'quota exhausted'}}));process.exit(0);}
     if (process.env.MODE === 'stdout-quota') {console.log(JSON.stringify({type:'error',message:'rate_limit_exceeded'}));process.exit(1);}
     fs.writeFileSync(target,JSON.stringify(report));
     if (process.env.MODE === 'hang') {
@@ -124,4 +125,9 @@ test('session locking, crash recovery and incompatible archives preserve old dat
   f.store.start(standaloneGoal('New',['Done']),f.state.modelConfig);
   const base=path.dirname(f.store.dir),archive=fs.readdirSync(base).find(n=>n.startsWith('archive-'));
   assert.equal(JSON.parse(fs.readFileSync(path.join(base,archive,'session.json'))).special,'old data');
+});
+
+test('structured quota failure with exit zero still falls back', async t => {
+  const f=fixture(t);await f.run('zero-quota');
+  assert.equal(f.state.status,'done');assert.equal(f.state.history[0].selection.model,'second');
 });
