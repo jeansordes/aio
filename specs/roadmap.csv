@@ -30,7 +30,7 @@ id,level,parent_id,title,path,first_implemented_in_version,last_impacted_in_vers
 04,domain,,Agent Workflows,specs/00-domains/04-agent-workflows.md,,,done,a,,Goal and route nodes share one foreground runtime.
 04.00,feature,04,Interactive Workflows,specs/01-features/04.00-interactive-workflows.md,,,done,a,,Global harnesses and local resumable workflows with an ASCII view.
 04.00.00,requirement,04.00,Global Harnesses,specs/02-requirements/04.00.00-global-harnesses.md,,,done,a,,Atomic global ordered model profiles with explicit CLI/model pairs and immutable session selection snapshots.
-04.00.01,requirement,04.00,Goal Route Graph,specs/02-requirements/04.00.01-goal-route-graph.md,,,done,a,04.00.00,Validated Goal Route End graphs and project workflow discovery; standalone Goal shares the format.
+04.00.01,requirement,04.00,Goal Route Graph,specs/02-requirements/04.00.01-goal-route-graph.md,,,done,a,04.00.00,Version 2 action/route/script/end graphs; Goal expands to action and independent criterion routing with correction loop.
 04.00.02,requirement,04.00,Persistent Runtime,specs/02-requirements/04.00.02-persistent-runtime.md,,,done,a,04.00.01,One checkpointed runtime with evidence and routing reports; bounded cycles; process-group shutdown and recovery.
 04.00.03,requirement,04.00,Interactive ASCII View,specs/02-requirements/04.00.03-interactive-ascii-view.md,,,done,a,04.00.02,One menu for standalone Goals and YAML workflows with a live ASCII graph and pause-guidance-resume controls.
 04.00.04,requirement,04.00,Replace Legacy Orchestration,specs/02-requirements/04.00.04-replace-legacy-orchestration.md,,,done,a,04.00.03,Remove legacy commands and engine; retain distribution and updates; document the unified runtime and its example.
