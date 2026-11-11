@@ -190,3 +190,34 @@ test("the interactive menu loads a project workflow and preserves its snapshot",
   assert.deepEqual(readState(root).workflow, workflow);
   assert.equal(readState(root).current, "build");
 });
+
+test("interactive Goal notifies on pause and completion through the global config", { timeout: 10000 }, async (t) => {
+  const http = require("node:http");
+  const received = [];
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    received.push(JSON.parse(body));
+    res.end("ok");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise((resolve) => server.close(resolve)); });
+  const root = project(t);
+  fs.mkdirSync(path.join(root, "global/aio"), { recursive: true });
+  fs.writeFileSync(path.join(root, "global/aio/config.yaml"), YAML.stringify({
+    defaultHarness: "fixture",
+    harnesses: { fixture: { command: process.execPath, args: [path.join(root, "harness.cjs"), "codex", "{{prompt}}"] } },
+    notifications: { targets: [{ name: "local", type: "webhook", url: `http://127.0.0.1:${server.address().port}/` }] },
+  }));
+  const app = open(t, root);
+  await enterGoal(app);
+  await app.see("Your input is needed: Which fixture?");
+  await app.see("Press Enter to resume");
+  assert.deepEqual(received.map((entry) => entry.event), ["paused"]);
+  app.type("Use the local fixture");
+  await app.see("fixture check passed");
+  await app.exit();
+  assert.deepEqual(received.map((entry) => entry.event), ["paused", "completed"]);
+  const log = fs.readFileSync(path.join(root, ".aio/sessions/current/events.jsonl"), "utf8");
+  assert.match(log, /"type":"notification"/);
+});

@@ -125,6 +125,45 @@ node `model`, the selected harness's `model`, then global `defaultModel`.
 Missing or unavailable harnesses pause execution rather than substituting
 another agent. Every project uses this global configuration.
 
+## Notifications
+
+Configure optional notifications once in the same global config file; they
+apply to sessions in every project. The default events are `paused` and
+`completed`. You can also request `started` and `resumed`.
+
+```yaml
+notifications:
+  events: [paused, completed]
+  timeoutMs: 3000
+  targets:
+    - name: phone
+      type: ntfy
+      url: ${AIO_NTFY_URL}
+    - name: discord
+      type: discord
+      url: ${AIO_DISCORD_WEBHOOK}
+    - name: pushover
+      type: pushover
+      token: ${AIO_PUSHOVER_TOKEN}
+      user: ${AIO_PUSHOVER_USER}
+    - name: generic
+      type: webhook
+      url: ${AIO_WEBHOOK_URL}
+      headers:
+        Authorization: "Bearer ${AIO_WEBHOOK_TOKEN}"
+```
+
+Remove destinations you do not use and provide the referenced environment
+variables when starting aio. ntfy expects a topic URL; Pushover needs an
+application token and a user key. The generic webhook receives JSON containing
+`event`, `timestamp`, `machine`, `project`, `workflow`, `node`,
+`title` and `message`. The message can include the pause reason or a short
+result; full prompts and transcripts are not sent.
+
+Delivery errors are displayed and recorded without stopping the workflow.
+Requests have bounded timeouts and are not retried automatically. Acceptance
+by the service does not establish that a notification reached your device.
+
 ## Persistence and evidence
 
 The current workflow snapshot, defaults, node position, guidance and full
