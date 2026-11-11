@@ -29,7 +29,7 @@ id,level,parent_id,title,path,first_implemented_in_version,last_impacted_in_vers
 02.00.03,requirement,02.00,CLI shows man style help,specs/02-requirements/02.00.03-cli-shows-man-style-help.md,0.3.1,0.10.0,done,b,,Man-style help documents the Goal/workflow menu plus help version and update; non-interactive bare aio and help flags are equivalent.
 04,domain,,Agent Workflows,specs/00-domains/04-agent-workflows.md,,,done,a,,Goal and route nodes share one foreground runtime.
 04.00,feature,04,Interactive Workflows,specs/01-features/04.00-interactive-workflows.md,,,done,a,,Global harnesses and local resumable workflows with an ASCII view.
-04.00.00,requirement,04.00,Global Harnesses,specs/02-requirements/04.00.00-global-harnesses.md,,,done,a,,Global configuration with built-ins and custom harnesses; node harness and model overrides.
+04.00.00,requirement,04.00,Global Harnesses,specs/02-requirements/04.00.00-global-harnesses.md,,,done,a,,Atomic global ordered model profiles with explicit CLI/model pairs and immutable session selection snapshots.
 04.00.01,requirement,04.00,Goal Route Graph,specs/02-requirements/04.00.01-goal-route-graph.md,,,done,a,04.00.00,Validated Goal Route End graphs and project workflow discovery; standalone Goal shares the format.
 04.00.02,requirement,04.00,Persistent Runtime,specs/02-requirements/04.00.02-persistent-runtime.md,,,done,a,04.00.01,One checkpointed runtime with evidence and routing reports; bounded cycles; process-group shutdown and recovery.
 04.00.03,requirement,04.00,Interactive ASCII View,specs/02-requirements/04.00.03-interactive-ascii-view.md,,,done,a,04.00.02,One menu for standalone Goals and YAML workflows with a live ASCII graph and pause-guidance-resume controls.

@@ -1,0 +1,31 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { loadProfiles, saveProfiles, snapshotProfiles, fallbackReason } = require('../lib/model-profiles');
+test('profiles preserve order, snapshot concrete commands and reject incomplete configuration', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aio-profiles-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const data = loadProfiles({ XDG_CONFIG_HOME: root });
+  data.profiles.low = [{ harness: 'fixture', model: 'first' }, { harness: 'fixture', model: 'second' }];
+  saveProfiles(data);
+  assert.deepEqual(loadProfiles({ XDG_CONFIG_HOME: root }).profiles, data.profiles);
+  const workflow = { nodes: { review: { type: 'route', modelProfile: 'low' } } };
+  const loaded = { harnesses: { fixture: { command: process.execPath, args: ['{{model}}', '{{prompt}}'] } } };
+  const snapshot = snapshotProfiles(workflow, data.profiles, loaded);
+  data.profiles.low.reverse();
+  loaded.harnesses.fixture.command = 'changed';
+  assert.equal(snapshot.profiles.low[0].model, 'first');
+  assert.equal(snapshot.harnesses.fixture.command, process.execPath);
+  assert.throws(() => snapshotProfiles(workflow, {}, loaded), /Missing model profile/);
+  data.profiles.low = [];
+  assert.throws(() => saveProfiles(data), /at least one/);
+});
+test('fallback classification is restricted to recognized failures', () => {
+  assert.equal(fallbackReason('quota exhausted'), 'quota exhausted');
+  assert.equal(fallbackReason('rate_limit_exceeded'), 'rate limited');
+  assert.equal(fallbackReason('model foo is not available'), 'model unavailable');
+  assert.equal(fallbackReason('permission denied'), null);
+  assert.equal(fallbackReason('invalid JSON report'), null);
+});
