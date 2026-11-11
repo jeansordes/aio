@@ -64,3 +64,4 @@ id,level,parent_id,title,path,first_implemented_in_version,last_impacted_in_vers
 04.00,feature,04,Interactive Workflows,specs/01-features/04.00-interactive-workflows.md,,,in_progress,a,,Global harnesses and local resumable workflows with an ASCII view.
 04.00.00,requirement,04.00,Global Harnesses,specs/02-requirements/04.00.00-global-harnesses.md,,,done,a,,Global configuration with built-ins and custom harnesses; node harness and model overrides.
 04.00.01,requirement,04.00,Goal Route Graph,specs/02-requirements/04.00.01-goal-route-graph.md,,,done,a,04.00.00,Validated Goal Route End graphs and project workflow discovery; standalone Goal shares the format.
+04.00.02,requirement,04.00,Persistent Runtime,specs/02-requirements/04.00.02-persistent-runtime.md,,,done,a,04.00.01,One checkpointed runtime with evidence and routing reports; bounded cycles; process-group shutdown and recovery.
