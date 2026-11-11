@@ -22,6 +22,7 @@ test('inspection follows keyboard without changing execution and shows only sele
     assert.equal(state.current,'action');assert.doesNotMatch(screen,/Work prompt/);
     terminal.emit('key','f',{});assert.match(screen,/Work prompt/);
     output.columns=15;output.rows=8;terminal.redraw();
+    assert.match(screen,/Work/); assert.match(screen,/>\[1\]</);
   } finally {view.close();}
   assert.equal(bus.listenerCount('nodeEnter'),0);
 });
