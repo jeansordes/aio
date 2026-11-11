@@ -8,4 +8,4 @@ run from many places.
 User should not need complex install flow.
 
 The CLI entrypoint must explain itself: bare invocations in a terminal open
-goal mode. Non-interactive bare invocations and explicit help flags show help.
+the Goal/workflow menu. Non-interactive bare invocations and explicit help flags show help.

@@ -1,288 +1,156 @@
-# `@jeansordes/aio`
+# @jeansordes/aio
 
-[![npm](https://img.shields.io/npm/v/@jeansordes/aio.svg)](https://www.npmjs.com/package/@jeansordes/aio)
-[![Node](https://img.shields.io/node/v/@jeansordes/aio.svg)](https://nodejs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+An interactive terminal for Goals and agent-routed workflows.
 
-Project-local AI orchestration. Run an interactive goal or a declarative YAML
-workflow with the AI CLI you already use.
+Run `aio` in your project directory. Choose a standalone Goal, select a YAML
+workflow, or resume saved work. The terminal shows an ASCII graph, the active
+node and recent agent output.
 
-## What is aio?
+## Start
 
-`aio` scaffolds a `.aio/` directory in your repo and runs **YAML-defined
-workflows**. Each step invokes a **role** through a **provider**. The default
-template targets the [Cursor Agent CLI](https://cursor.com/docs/cli)
-(`cursor-agent` on your `PATH`). Providers live in `providers.yaml`, so you can
-swap or extend CLIs without rewriting workflows.
-
-Workflow progress comes from **process exit codes and working-tree changes**, not
-from parsing model JSON. Agents coordinate through **project files** (code, specs,
-roadmap rows), so handoffs stay inspectable and versionable.
-
-## Why it is useful
-
-- **Repeatable runs:** encode how each agent step is invoked once, then run the
-  same graph with `aio run` or `aio run <workflow>`.
-- **Execution is data:** change command, args, or isolation in YAML; roles and
-  workflows stay stable.
-- **Orchestration stays in `.aio/`:** product knowledge (specs, roadmap, tasks)
-  stays where you put it; init can record a tracking file and pass it into
-  provider prompts.
-
-## Interactive goal mode
-
-Run `aio` (or `npx @jeansordes/aio`) in a terminal from your project directory.
-Pick a harness if more than one is available, enter the goal, and enter one
-success criterion per line. aio starts a fresh harness turn each time and
-shows its output. It stops when the harness reports evidence for every criterion,
-or pauses when it needs your input or reaches ten turns.
-
-- Type `p` then Enter to pause after the current turn.
-- When paused, press Enter to resume, or enter guidance to send to the next turn.
-- Type `q` then Enter or press Ctrl+C to quit. This stops the harness. Reopen
-  `aio` in the same directory to resume from the last saved checkpoint.
-
-Cursor Agent and Codex work without `aio init`. To use another headless CLI,
-add a provider to `.aio/providers.yaml` with a command and arguments containing
-`{{prompt}}`, or set `promptInput: stdin` and pass the harness's stdin flag
-if it needs one. aio starts it in the current project directory. Checkpoints
-stay local under `.aio/sessions/goal/`.
-
-## Quick start for YAML workflows
-
-Set `CURSOR_API_KEY` as described in the Cursor docs, then:
+Install an authenticated Cursor Agent CLI or Codex CLI, then run:
 
 ```bash
-npx @jeansordes/aio init
-npx @jeansordes/aio run
+npx @jeansordes/aio
 ```
 
-Use `bunx @jeansordes/aio` instead of `npx` if you prefer Bun.
-
-The generated `.aio/providers.yaml` configures `cursor-agent` for non-interactive
-use. Other named providers in that file ship as `not_configured` until you edit
-them.
-
-## Example workflow
-
-The **default** workflow after `init` is a small loop:
-
-```yaml
-name: default
-initial: pick
-states:
-  pick:
-    role: pick
-    next: do
-  do:
-    role: do
-    next: eval
-  eval:
-    role: eval
-    next:
-      - if: step.exit_code == 0
-        then: done
-      - then: pick
-  done:
-    type: final
-```
-
-Each `aio run` loads this graph **once**. Branching and repeats come from
-`next:` transitions (see `eval` above). A hard cap on how many states run in a
-single invocation is `workflow.maxSteps` in `.aio/config.yaml`.
-
-The [`templates/roadmap-step/`](templates/roadmap-step/) template defines a
-small state machine: pick a roadmap row, implement, test, optionally fix, commit,
-then finish. The workflow file looks like this:
-
-```yaml
-name: roadmap-step
-initial: pickRow
-states:
-  pickRow:
-    role: pick-row
-    next:
-      - if: step.status == "ok"
-        then: implement
-      - then: done
-  implement:
-    role: implement
-    next: test
-  test:
-    role: test
-    next:
-      - if: step.exit_code == 0
-        then: commit
-      - then: fix
-  fix:
-    role: fix
-    next: test
-  commit:
-    role: commit
-    next: done
-  done:
-    type: final
-```
-
-## Providers
-
-Roles call whichever provider they declare. The default **cursor** provider in a
-new project matches the template:
-
-```yaml
-providers:
-  cursor:
-    command: cursor-agent
-    args:
-      - "-p"
-      - "--force"
-      - "--trust"
-      - "--output-format"
-      - "stream-json"
-      - "--stream-partial-output"
-      - "{{isolation_args}}"
-      - "{{model_args}}"
-      - "{{prompt}}"
-    isolationArgs:
-      - "--workspace"
-      - "{{project_root}}"
-      - "--sandbox"
-      - "enabled"
-    modelArgs:
-      - "--model"
-      - "{{model}}"
-    prompt:
-      include:
-        - instructions
-        - tracking_file
-        - context_files
-    success:
-      exit_codes: [0]
-```
-
-Additional provider slots (`codex`, `claude`, `gemini`, `opencode`, `custom`) are
-`not_configured` stubs until you fill them in. Provider entries define command,
-arguments, how the prompt is built, and which exit codes count as success.
-`aio` treats stdout and stderr as logs; workflow decisions use exit codes and
-repo state, not parsed AI JSON.
-
-## `.aio/` layout
-
-After `init`, a typical tree looks like this:
-
-```text
-.aio/
-  config.yaml
-  providers.yaml
-  roles/
-    pick.yaml
-    do.yaml
-    eval.yaml
-  workflows/
-    default.yaml
-  prompts/
-  schemas/
-```
-
-Default **roles** (each is instructions plus provider context for one step):
-
-- **pick:** read `tracking.file` (see below), choose one task, and write the
-  choice into `state.json` under the current run directory.
-- **do:** read `state.json` and implement that task in the working tree.
-- **eval:** re-read the task and working tree; exit `0` when done (workflow
-  finishes), or non-zero to loop back to **pick** with notes in `state.json` for
-  the next iteration.
-
-More elaborate role sets (analyse, plan, commit, publish, and so on) are
-documented in [`docs/extending-the-default-workflow.md`](docs/extending-the-default-workflow.md).
-That guide is for the repository; `aio init` does not copy `docs/` into your
-project.
-
-`setup` (same as `init`) never overwrites existing files.
-
-During **init**, `config.yaml` can record a `tracking.file` for your task or
-roadmap tracker. In an interactive shell you get a short prompt: **Enter** keeps
-the first detected file among `specs/roadmap.csv`, `TASKS.md`, and `ROADMAP.md`,
-or, if none exist, scaffolds the optional `specs/` layout (including
-`specs/roadmap.csv`) as the default. You can type another path, **`s`** to
-scaffold `specs/` explicitly, or **`n`** for no file. In non-interactive runs
-(for example CI) init auto-detects those paths and does not create `specs/`.
-
-Optional **Discord** notification settings from interactive init can be merged
-into a gitignored `.aio/.env`; the template ships `.gitignore` rules under
-`.aio/` so secrets are not committed.
-
-## CLI reference
-
-- **`aio`**, **`aio help`**, **`aio -h`**, **`aio --help`:** print man-style help
-  (`NAME`, `SYNOPSIS`, `DESCRIPTION`, `COMMANDS`, `EXAMPLES`, `VERSION`).
-- **`aio version`**, **`aio --version`**, **`aio -v`:** print package version and
-  install context.
-- **`aio init`**, **`aio setup`:** create or refresh `.aio/`; existing files are
-  not overwritten (`setup` is a synonym for `init`).
-- **`aio run`:** run `.aio/workflows/default.yaml`. **`aio run <workflow>`:**
-  run `.aio/workflows/<workflow>.yaml` **once** (one run id under `.aio/runs/`).
-  To repeat states, encode `next:` branches in the workflow. Use **`--quiet`** /
-  **`--verbose`**, and **`--allow-edits-outside-dir`** to disable project-directory
-  isolation for the Cursor provider (a warning is printed). Logs live under
-  `.aio/runs/<id>/`; the latest id is stored in `.aio/runs/latest`.
-- **`aio observe`:** follow the conversation log for the latest run (like
-  `tail -f`). Use **`--events`** for `events.jsonl`, **`--run <id>`** for a
-  specific run directory.
-- **`aio update`:** check the registry and upgrade a detected global npm, pnpm,
-  or Bun install, or print manual install commands for other contexts.
-
-## Updates
-
-For installs `aio` recognizes as a **global npm, pnpm, or Bun** copy, a normal
-command may compare your version to the registry, prompt on a TTY, and run the
-matching installer if you accept.
-
-`npx @jeansordes/aio` and `bunx @jeansordes/aio` do **not** self-update. If a
-newer version exists but `aio` cannot run an installer (npx, bunx, an
-unrecognized path, or `unknown`), it may print a short notice to stderr with
-`npm` / `pnpm` / `bun` one-liners. Set **`AIO_NO_UPDATE_CHECK=1`** to skip
-registry checks and those notices on normal commands (for example in CI). The
-**`aio update`** subcommand still contacts the registry when you run it
-explicitly.
-
-**`aio update`** fetches the latest version and, when possible, updates a
-detected global npm, pnpm, or Bun install. For npx, bunx, local, or other
-unsupported contexts it prints manual install commands instead of changing an
-unrelated environment.
-
-## Templates
-
-- **[`templates/roadmap-step/`](templates/roadmap-step/):** copy
-  `workflows/roadmap-step.yaml` and the matching files under `roles/` into a
-  target project's `.aio/`, then run **`aio run roadmap-step`** once
-  `cursor-agent` is available.
-- **[`templates/debug-introspect/`](templates/debug-introspect/):** minimal
-  read-only workflow (`introspect`) for checking what the provider sees and would
-  do. Copy `workflows/introspect.yaml` and `roles/introspect.yaml` into `.aio/`,
-  then run **`aio run introspect`**.
-
-## Install globally
-
-With npm:
+You can also use `bunx @jeansordes/aio`, or install globally:
 
 ```bash
 npm install -g @jeansordes/aio
 aio
 ```
 
-With Bun:
+On first use, choose the default harness. For a standalone Goal, enter an
+objective and one success criterion per line, then an empty line.
 
-```bash
-bun add -g @jeansordes/aio
-aio
+- `p` then Enter pauses after the current invocation.
+- At a pause, press Enter to resume, or enter guidance for the agent.
+- `q` then Enter or Ctrl+C stops the harness and its tools.
+- Reopen `aio` in the same directory to resume the saved checkpoint.
+
+Execution runs only while aio is open. One session can execute per project.
+After an interruption, project files may include changes from the unfinished
+invocation even though its result has not been accepted.
+
+## Workflows
+
+Put YAML files in `.aio/workflows/` to make them available in the menu.
+The package includes [an implementation/review example](examples/review.yaml).
+
+A workflow defines `name`, `initial`, `nodes` and an optional `maxInvocations`.
+Objectives belong to Goal nodes, not to the workflow.
+
+```yaml
+name: implement-and-check
+initial: implement
+nodes:
+  implement:
+    type: goal
+    objective: Implement the behavior described in TASK.md.
+    criteria:
+      - The behavior is implemented and relevant tests pass.
+    next: decide
+
+  decide:
+    type: route
+    instructions: Inspect the implementation and its test evidence.
+    routes:
+      - to: implement
+        description: Corrections are needed.
+      - to: complete
+        description: The implementation satisfies the requested behavior.
+
+  complete:
+    type: end
 ```
 
-## Requirements
+A **Goal** owns `objective`, nonempty `criteria`, and `next`. It can also
+define `instructions` and `maxTurns`. The agent works in fresh invocations
+until it reports success with evidence for every criterion. Incomplete work
+continues in the same node. When it needs your intervention, aio pauses and
+shows its request.
 
-Use a current Node.js runtime. The published package is tested with Node.js 22.
+A **Route** owns `instructions` and a list of `routes`, each with `to` and
+`description`. Its agent chooses an allowed destination and gives a reason.
+It may inspect files; its instructions prohibit performing the Goals' work.
+This is an instruction boundary, not a universal read-only sandbox.
 
-## Changelog
+An **End** node completes execution without invoking an agent.
 
-Releases are listed in
-[CHANGELOG.md](https://github.com/jeansordes/aio/blob/main/CHANGELOG.md).
+Agent nodes may set `harness` and `model`. A Goal revisited through a cycle
+starts a fresh visit with the previous results available. The standalone Goal
+uses this same runtime with a Goal node followed by an End.
+
+By default, aio pauses after ten invocations of the current Goal or one hundred
+invocations across the workflow. Set `maxTurns` on a Goal or `maxInvocations`
+on the workflow to change these limits. Resuming explicitly resets these
+execution-window limits. A limit prompts you to review progress; it does not
+declare the task blocked or complete.
+
+## Global harness settings
+
+Settings live in `$XDG_CONFIG_HOME/aio/config.yaml`, or
+`~/.config/aio/config.yaml` when the variable is unset or relative.
+Cursor and Codex have built-in adapters. Authentication is handled by their CLIs.
+
+```yaml
+defaultHarness: codex
+# defaultModel: your-model
+
+harnesses:
+  custom:
+    command: /absolute/path/to/your-cli
+    args:
+      - "--print"
+      - "{{model_args}}"
+      - "{{prompt}}"
+    modelArgs:
+      - "--model"
+      - "{{model}}"
+```
+
+A custom harness must run headlessly in the project directory and be able to
+write the requested JSON report file. Use the CLI's actual supported arguments.
+For a harness that reads the prompt from stdin, set `promptInput: stdin` and
+supply any stdin flag that CLI requires in `args`.
+
+Argument templates support `{{prompt}}`, `{{project_root}}` and `{{model}}`.
+The standalone `{{model_args}}` entry expands the configured model arguments
+when a model is selected. Optional `successExitCodes` defaults to `[0]`.
+Relative command paths resolve from the global config directory.
+
+Node harness choices override the global default. Model precedence is:
+node `model`, the selected harness's `model`, then global `defaultModel`.
+Missing or unavailable harnesses pause execution rather than substituting
+another agent. Every project uses this global configuration.
+
+## Persistence and evidence
+
+The current workflow snapshot, defaults, node position, guidance and full
+result history live in `.aio/sessions/current/session.json`. The directory
+also contains `events.jsonl` and `conversation.log`; sessions are ignored by Git.
+Resume uses the saved workflow even if the source YAML has changed.
+
+A successful process exit alone does not establish completion. aio accepts
+only a valid report for the current invocation and displays the evidence
+reported by the agent. It does not independently prove qualitative criteria.
+
+Each accepted result and next position are saved atomically. New sessions
+replace the current session and its logs. After a forced process kill, check
+that the old aio and harness processes have stopped before removing a stale
+`.aio/sessions/lock`.
+
+## Commands and development
+
+`aio --help` shows usage; `aio --version` shows installation details.
+`aio update` updates supported global installations. Set
+`AIO_NO_UPDATE_CHECK=1` to disable startup update checks.
+
+From this repository:
+
+```bash
+npm ci
+npm test
+./dev-bin/daio
+```

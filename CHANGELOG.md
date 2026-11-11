@@ -1,21 +1,27 @@
 ## Unreleased
 
+### Features
+
+- **workflows:** one foreground runtime executes Goal nodes, agent-selected routes and End nodes. Goals own objectives and success criteria; standalone Goals use the same runtime.
+- **harnesses:** global XDG configuration with Cursor, Codex and custom harnesses; node-level harness and model choices.
+- **ui:** interactive session menu, live ASCII graph, guidance on pause, atomic checkpoints and workflow snapshots for resume.
+
 ### BREAKING CHANGE
 
-- **cli:** `aio run` no longer accepts a loop count (`aio run <n>`, second positional, `--loops` / `-n`). Each invocation runs the workflow once; repeats use `next:` in YAML and are capped by `workflow.maxSteps` ([`03.03.01`](specs/02-requirements/03.03.01-limit-workflow-loops.md)).
-- **template:** default scaffold is `pick → do → eval` with handoff in `.aio/runs/<id>/state.json`. Removed roles (`analyse`, `plan`, `build`, `review`, `fix`, `log`, `commit`, `publish`, `summarize`) are documented in [`docs/extending-the-default-workflow.md`](docs/extending-the-default-workflow.md).
+- **orchestration:** replaces project providers, separate roles and technical transition conditions with Goal/Route/End YAML. Removes `init`, `setup`, `run`, `observe`, scaffolding and Discord integration. Existing project files are not migrated or deleted.
+- **sessions:** the unified runtime uses a new session format; prior Goal/workflow sessions are not resumed automatically.
 
 ## [0.11.0](https://github.com/jeansordes/aio/compare/v0.10.0...v0.11.0) (2026-04-28)
 
 ### Features
 
-* **cli:** `aio run` supports loop counts (`aio run 3`, `aio run wf 5`, `aio run 0`, `--loops` / `-n`), two-stage SIGINT (finish loop vs abort provider), `--allow-edits-outside-dir`, and `--verbose` NDJSON on stderr for stream-json providers ([`03.03.01`](specs/02-requirements/03.03.01-limit-workflow-loops.md), [`03.03.03`](specs/02-requirements/03.03.03-stream-runtime-logs.md)).
-* **orchestration:** per-provider `isolationArgs` with `{{isolation_args}}` / `{{project_root}}`, `GIT_CEILING_DIRECTORIES` for provider children, empty `AGENTS.md` on init when nested ([`03.00.06`](specs/02-requirements/03.00.06-scope-provider-to-project-root.md)).
+* **cli:** `aio run` supports loop counts (`aio run 3`, `aio run wf 5`, `aio run 0`, `--loops` / `-n`), two-stage SIGINT (finish loop vs abort provider), `--allow-edits-outside-dir`, and `--verbose` NDJSON on stderr for stream-json providers (`03.03.01`, `03.03.03`).
+* **orchestration:** per-provider `isolationArgs` with `{{isolation_args}}` / `{{project_root}}`, `GIT_CEILING_DIRECTORIES` for provider children, empty `AGENTS.md` on init when nested (`03.00.06`).
 * **term-sink:** render Cursor `stream-json` / `--stream-partial-output` in the terminal; heartbeat uses exponential backoff and elapsed seconds.
 
 ### BREAKING CHANGE
 
-* Workflow YAML **`summary`** / **`summary.enabled`** no longer runs a second provider call after a step. Use a normal workflow state and optional `run_dir` in the role’s `prompt.include` ([`03.03.05`](specs/02-requirements/03.03.05-per-state-ai-summary.md)).
+* Workflow YAML **`summary`** / **`summary.enabled`** no longer runs a second provider call after a step. Use a normal workflow state and optional `run_dir` in the role’s `prompt.include` (`03.03.05`).
 
 ## [0.10.0](https://github.com/jeansordes/aio/compare/v0.7.0...v0.10.0) (2026-04-27)
 

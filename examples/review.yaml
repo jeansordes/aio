@@ -1,0 +1,25 @@
+name: implementation-and-review
+initial: implement
+nodes:
+  implement:
+    type: goal
+    objective: Implement the change described in TASK.md.
+    criteria:
+      - The requested behavior is implemented and relevant tests pass.
+    next: review
+  review:
+    type: goal
+    objective: Review the current implementation.
+    criteria:
+      - REVIEW.md describes actionable problems or justifies their absence.
+    next: decide
+  decide:
+    type: route
+    instructions: Inspect REVIEW.md and the node results to choose the next step.
+    routes:
+      - to: implement
+        description: The review identifies problems requiring changes.
+      - to: complete
+        description: The implementation satisfies the review.
+  complete:
+    type: end
